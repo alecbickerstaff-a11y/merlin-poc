@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import React, { useState } from 'react';
 import type { CampaignConfig, BannerPreset, FrameConfig, FrameTransition } from '../../lib/types';
 import CollapsibleSection from './CollapsibleSection';
 
@@ -80,6 +80,170 @@ const FONT_OPTIONS = [
   'Oswald',
 ];
 
+// ── Logo Uploader ────────────────────────────────────────────────────────────
+
+function LogoUploader({
+  logoUrl,
+  onChange,
+}: {
+  logoUrl?: string;
+  onChange: (url: string | undefined) => void;
+}) {
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
+
+  const handleFile = (file: File) => {
+    if (!file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      onChange(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file) handleFile(file);
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleFile(file);
+  };
+
+  const isBase64 = logoUrl?.startsWith('data:');
+
+  return (
+    <div>
+      {/* Upload / drop zone */}
+      {!logoUrl && (
+        <div
+          onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={handleDrop}
+          onClick={() => fileInputRef.current?.click()}
+          style={{
+            border: `1px dashed ${dragging ? 'var(--accent)' : 'var(--border-light)'}`,
+            borderRadius: '4px',
+            padding: '14px 8px',
+            textAlign: 'center',
+            cursor: 'pointer',
+            background: dragging ? 'var(--accent-dim)' : 'var(--bg-darkest)',
+            transition: 'all 0.15s',
+          }}
+        >
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style={{ margin: '0 auto 6px', display: 'block' }}>
+            <path d="M10 4V14M10 4L6 8M10 4L14 8" stroke="var(--text-muted)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M3 14V15C3 16.1046 3.89543 17 5 17H15C16.1046 17 17 16.1046 17 15V14" stroke="var(--text-muted)" strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
+          <span style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'block' }}>
+            Click to upload or drag &amp; drop
+          </span>
+          <span style={{ fontSize: '9px', color: 'var(--text-muted)', display: 'block', marginTop: '2px', opacity: 0.6 }}>
+            PNG, SVG, JPG
+          </span>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleInputChange}
+            style={{ display: 'none' }}
+          />
+        </div>
+      )}
+
+      {/* URL input (always visible when no file uploaded, or as alternate) */}
+      {!logoUrl && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px' }}>
+          <div style={{ flex: 1, height: '1px', background: 'var(--border)' }} />
+          <span style={{ fontSize: '9px', color: 'var(--text-muted)' }}>or paste URL</span>
+          <div style={{ flex: 1, height: '1px', background: 'var(--border)' }} />
+        </div>
+      )}
+      {!logoUrl && (
+        <input
+          type="url"
+          placeholder="https://example.com/logo.png"
+          style={{ marginTop: '6px' }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              const val = (e.target as HTMLInputElement).value.trim();
+              if (val) onChange(val);
+            }
+          }}
+          onBlur={(e) => {
+            const val = e.target.value.trim();
+            if (val) onChange(val);
+          }}
+        />
+      )}
+
+      {/* Preview & remove */}
+      {logoUrl && (
+        <div
+          style={{
+            padding: '8px',
+            background: 'var(--bg-darkest)',
+            borderRadius: '4px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+          }}
+        >
+          <div
+            style={{
+              width: '48px',
+              height: '48px',
+              borderRadius: '4px',
+              border: '1px solid var(--border)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: '#fff',
+              flexShrink: 0,
+              overflow: 'hidden',
+            }}
+          >
+            <img
+              src={logoUrl}
+              alt="Logo"
+              style={{ maxWidth: '44px', maxHeight: '44px', objectFit: 'contain' }}
+              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+            />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: '10px', color: 'var(--text-primary)', fontWeight: 600 }}>
+              {isBase64 ? 'Uploaded image' : 'URL'}
+            </div>
+            {!isBase64 && (
+              <div style={{ fontSize: '9px', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {logoUrl}
+              </div>
+            )}
+          </div>
+          <button
+            onClick={() => onChange(undefined)}
+            style={{
+              background: 'transparent',
+              border: '1px solid var(--border-light)',
+              color: 'var(--text-muted)',
+              borderRadius: '3px',
+              padding: '3px 8px',
+              fontSize: '9px',
+              cursor: 'pointer',
+              flexShrink: 0,
+            }}
+          >
+            Remove
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main Component ───────────────────────────────────────────────────────────
 
 export default function PropertiesPanel({ config, onChange }: Props) {
@@ -129,11 +293,8 @@ export default function PropertiesPanel({ config, onChange }: Props) {
   return (
     <div
       style={{
-        width: '280px',
-        minWidth: '280px',
-        height: '100%',
-        background: 'var(--bg-dark)',
-        borderRight: '1px solid var(--border)',
+        flex: 1,
+        minHeight: 0,
         overflowY: 'auto',
         display: 'flex',
         flexDirection: 'column',
@@ -224,6 +385,18 @@ export default function PropertiesPanel({ config, onChange }: Props) {
             value={config.brand.name}
             onChange={(e) =>
               update({ brand: { ...config.brand, name: e.target.value } })
+            }
+          />
+        </FieldRow>
+
+        <FieldRow>
+          <Label sub="optional">Logo</Label>
+          <LogoUploader
+            logoUrl={config.brand.logoUrl}
+            onChange={(url) =>
+              update({
+                brand: { ...config.brand, logoUrl: url || undefined },
+              })
             }
           />
         </FieldRow>
