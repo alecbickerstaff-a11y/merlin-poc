@@ -34,22 +34,27 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ── Multi-size mode ──────────────────────────────────────────────────
+    // ── Multi-size mode (sequential to avoid API rate limits) ───────────
     if (Array.isArray(sizes) && sizes.length > 0) {
-      const results = await Promise.allSettled(
-        sizes.map((s: string) => callN8N(webhookUrl, keyMessage, visualTone, s)),
-      );
+      const mapped: Array<{
+        size: string;
+        status: 'complete' | 'error';
+        data?: Record<string, unknown>;
+        error?: string;
+      }> = [];
 
-      const mapped = results.map((result, i) => {
-        if (result.status === 'fulfilled') {
-          return { size: sizes[i], status: 'complete' as const, data: result.value };
+      for (const s of sizes as string[]) {
+        try {
+          const data = await callN8N(webhookUrl, keyMessage, visualTone, s);
+          mapped.push({ size: s, status: 'complete', data });
+        } catch (err: unknown) {
+          mapped.push({
+            size: s,
+            status: 'error',
+            error: err instanceof Error ? err.message : 'Unknown error',
+          });
         }
-        return {
-          size: sizes[i],
-          status: 'error' as const,
-          error: result.reason?.message || 'Unknown error',
-        };
-      });
+      }
 
       return NextResponse.json({ results: mapped });
     }
@@ -62,7 +67,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           error:
-            'Request timed out after 60 seconds. The n8n workflow may still be processing — try again in a moment.',
+            'Request timed out after 120 seconds. The n8n workflow may still be processing — try again in a moment.',
         },
         { status: 504 },
       );
@@ -83,7 +88,7 @@ async function callN8N(
   size: string,
 ): Promise<Record<string, unknown>> {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 60_000);
+  const timeoutId = setTimeout(() => controller.abort(), 120_000);
 
   try {
     const response = await fetch(webhookUrl, {
