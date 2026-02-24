@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 // ── POST /api/generate ──────────────────────────────────────────────────────
-// Proxies the AI generation request to the n8n webhook.
-// Expects: { keyMessage: string, visualTone: string, size: string }
-// Returns:  the n8n response JSON (shape depends on the workflow)
+// Supports both single-size and multi-size generation.
+//
+// Single-size (backward compatible):
+//   { keyMessage, visualTone, size }  →  single n8n response JSON
+//
+// Multi-size:
+//   { keyMessage, visualTone, sizes: ["300x250","728x90","300x600"] }
+//   → { results: [{ size, status, data?, error? }, ...] }
 
 export async function POST(req: NextRequest) {
   const webhookUrl = process.env.N8N_WEBHOOK_URL;
@@ -20,7 +25,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { keyMessage, visualTone, size } = body;
+    const { keyMessage, visualTone, size, sizes } = body;
 
     if (!keyMessage) {
       return NextResponse.json(
@@ -29,34 +34,28 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Call n8n webhook with a 60-second timeout (Leonardo image gen takes time)
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 60_000);
-
-    const n8nResponse = await fetch(webhookUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        keyMessage,
-        visualTone: visualTone || 'Warm & Hopeful',
-        size: size || '300x250',
-      }),
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
-
-    if (!n8nResponse.ok) {
-      const errText = await n8nResponse.text().catch(() => 'Unknown error');
-      return NextResponse.json(
-        {
-          error: `n8n webhook returned ${n8nResponse.status}: ${errText}`,
-        },
-        { status: 502 },
+    // ── Multi-size mode ──────────────────────────────────────────────────
+    if (Array.isArray(sizes) && sizes.length > 0) {
+      const results = await Promise.allSettled(
+        sizes.map((s: string) => callN8N(webhookUrl, keyMessage, visualTone, s)),
       );
+
+      const mapped = results.map((result, i) => {
+        if (result.status === 'fulfilled') {
+          return { size: sizes[i], status: 'complete' as const, data: result.value };
+        }
+        return {
+          size: sizes[i],
+          status: 'error' as const,
+          error: result.reason?.message || 'Unknown error',
+        };
+      });
+
+      return NextResponse.json({ results: mapped });
     }
 
-    const data = await n8nResponse.json();
+    // ── Single-size mode (backward compatible) ───────────────────────────
+    const data = await callN8N(webhookUrl, keyMessage, visualTone, size || '300x250');
     return NextResponse.json(data);
   } catch (err: unknown) {
     if (err instanceof Error && err.name === 'AbortError') {
@@ -72,5 +71,42 @@ export async function POST(req: NextRequest) {
     const message =
       err instanceof Error ? err.message : 'An unexpected error occurred.';
     return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+// ── Helper: call the n8n webhook for a single size ──────────────────────────
+
+async function callN8N(
+  webhookUrl: string,
+  keyMessage: string,
+  visualTone: string,
+  size: string,
+): Promise<Record<string, unknown>> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 60_000);
+
+  try {
+    const response = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        keyMessage,
+        visualTone: visualTone || 'Warm & Hopeful',
+        size,
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const errText = await response.text().catch(() => 'Unknown error');
+      throw new Error(`n8n webhook returned ${response.status}: ${errText}`);
+    }
+
+    return await response.json();
+  } catch (err) {
+    clearTimeout(timeoutId);
+    throw err;
   }
 }

@@ -1,7 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import type { CampaignConfig } from '../../lib/types';
+import type { CampaignConfig, GenerationJob } from '../../lib/types';
+import { useWorkspace } from '../context/WorkspaceContext';
+import SizeSelector from './SizeSelector';
+import GenerationProgress from './GenerationProgress';
 
 // ── Visual tone options ──────────────────────────────────────────────────────
 
@@ -22,16 +25,69 @@ interface Props {
 // ── Component ────────────────────────────────────────────────────────────────
 
 export default function AIGenerateSection({ config, onConfigUpdate }: Props) {
+  const { state, dispatch } = useWorkspace();
   const [keyMessage, setKeyMessage] = useState('');
   const [visualTone, setVisualTone] = useState<string>(VISUAL_TONES[0]);
-  const [loading, setLoading] = useState(false);
+  const [selectedSizes, setSelectedSizes] = useState<string[]>([
+    config.size.preset || '300x250',
+  ]);
   const [error, setError] = useState<string | null>(null);
+
+  const loading = state.isGenerating;
 
   const handleGenerate = async () => {
     if (!keyMessage.trim()) return;
+    if (selectedSizes.length === 0) {
+      setError('Select at least one banner size.');
+      return;
+    }
 
-    setLoading(true);
     setError(null);
+
+    // ── Single-size mode (1 size selected): same as before ──────────────
+    if (selectedSizes.length === 1) {
+      dispatch({ type: 'SET_IS_GENERATING', value: true });
+
+      try {
+        const res = await fetch('/api/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            keyMessage: keyMessage.trim(),
+            visualTone,
+            size: selectedSizes[0],
+          }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          setError(data.error || `Request failed (${res.status})`);
+          return;
+        }
+
+        // Apply to the current editor config
+        const updatedConfig = applyAIResponse(config, data);
+        onConfigUpdate(updatedConfig);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'Network error';
+        setError(msg);
+      } finally {
+        dispatch({ type: 'SET_IS_GENERATING', value: false });
+      }
+      return;
+    }
+
+    // ── Multi-size mode ─────────────────────────────────────────────────
+    dispatch({ type: 'SET_IS_GENERATING', value: true });
+
+    // Create initial job list
+    const initialJobs: GenerationJob[] = selectedSizes.map((size) => ({
+      id: `job-${size}-${Date.now()}`,
+      size,
+      status: 'generating',
+    }));
+    dispatch({ type: 'SET_GENERATION_JOBS', jobs: initialJobs });
 
     try {
       const res = await fetch('/api/generate', {
@@ -40,7 +96,7 @@ export default function AIGenerateSection({ config, onConfigUpdate }: Props) {
         body: JSON.stringify({
           keyMessage: keyMessage.trim(),
           visualTone,
-          size: config.size.preset || `${config.size.width}x${config.size.height}`,
+          sizes: selectedSizes,
         }),
       });
 
@@ -48,17 +104,65 @@ export default function AIGenerateSection({ config, onConfigUpdate }: Props) {
 
       if (!res.ok) {
         setError(data.error || `Request failed (${res.status})`);
+        // Mark all jobs as errored
+        const errorJobs: GenerationJob[] = initialJobs.map((j) => ({
+          ...j,
+          status: 'error' as const,
+          error: data.error || 'Request failed',
+        }));
+        dispatch({ type: 'SET_GENERATION_JOBS', jobs: errorJobs });
         return;
       }
 
-      // ── Map n8n response onto the CampaignConfig ──────────────────────
-      const updatedConfig = applyAIResponse(config, data);
-      onConfigUpdate(updatedConfig);
+      // Map results back to jobs
+      const results = data.results as Array<{
+        size: string;
+        status: 'complete' | 'error';
+        data?: Record<string, unknown>;
+        error?: string;
+      }>;
+
+      const updatedJobs: GenerationJob[] = initialJobs.map((job) => {
+        const result = results.find((r) => r.size === job.size);
+        if (!result) {
+          return { ...job, status: 'error' as const, error: 'No result returned' };
+        }
+
+        if (result.status === 'complete' && result.data) {
+          // Build a config for this size
+          const sizeConfig = buildConfigForSize(config, job.size, result.data);
+          return {
+            ...job,
+            status: 'complete' as const,
+            config: sizeConfig,
+          };
+        }
+
+        return {
+          ...job,
+          status: 'error' as const,
+          error: result.error || 'Generation failed',
+        };
+      });
+
+      dispatch({ type: 'SET_GENERATION_JOBS', jobs: updatedJobs });
+
+      // Also update the editor with the first successful result
+      const firstSuccess = updatedJobs.find((j) => j.status === 'complete' && j.config);
+      if (firstSuccess?.config) {
+        onConfigUpdate(firstSuccess.config);
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Network error';
       setError(msg);
+      const errorJobs: GenerationJob[] = initialJobs.map((j) => ({
+        ...j,
+        status: 'error' as const,
+        error: msg,
+      }));
+      dispatch({ type: 'SET_GENERATION_JOBS', jobs: errorJobs });
     } finally {
-      setLoading(false);
+      dispatch({ type: 'SET_IS_GENERATING', value: false });
     }
   };
 
@@ -151,10 +255,17 @@ export default function AIGenerateSection({ config, onConfigUpdate }: Props) {
         ))}
       </select>
 
+      {/* Size Selector */}
+      <SizeSelector
+        selectedSizes={selectedSizes}
+        onChange={setSelectedSizes}
+        disabled={loading}
+      />
+
       {/* Generate button */}
       <button
         onClick={handleGenerate}
-        disabled={loading || !keyMessage.trim()}
+        disabled={loading || !keyMessage.trim() || selectedSizes.length === 0}
         style={{
           width: '100%',
           padding: '10px 16px',
@@ -165,19 +276,19 @@ export default function AIGenerateSection({ config, onConfigUpdate }: Props) {
           border: '1px solid var(--accent)',
           color: loading ? 'var(--text-secondary)' : '#000',
           borderRadius: '6px',
-          cursor: loading || !keyMessage.trim() ? 'not-allowed' : 'pointer',
+          cursor: loading || !keyMessage.trim() || selectedSizes.length === 0 ? 'not-allowed' : 'pointer',
           transition: 'all 0.15s',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           gap: '8px',
-          opacity: !keyMessage.trim() && !loading ? 0.5 : 1,
+          opacity: (!keyMessage.trim() || selectedSizes.length === 0) && !loading ? 0.5 : 1,
         }}
       >
         {loading ? (
           <>
             <Spinner />
-            Generating... (~20 seconds)
+            Generating {selectedSizes.length > 1 ? `${selectedSizes.length} banners` : ''}... (~20s)
           </>
         ) : (
           <>
@@ -187,10 +298,17 @@ export default function AIGenerateSection({ config, onConfigUpdate }: Props) {
                 fill="currentColor"
               />
             </svg>
-            Generate with AI
+            Generate {selectedSizes.length > 1 ? `${selectedSizes.length} Banners` : 'with AI'}
           </>
         )}
       </button>
+
+      {/* Generation Progress (multi-size) */}
+      {state.generationJobs.length > 0 && (
+        <div style={{ marginTop: '10px' }}>
+          <GenerationProgress jobs={state.generationJobs} />
+        </div>
+      )}
 
       {/* Error banner */}
       {error && (
@@ -234,6 +352,23 @@ function Spinner() {
       />
     </svg>
   );
+}
+
+// ── Build a config for a specific size from base config + AI response ───────
+
+function buildConfigForSize(
+  baseConfig: CampaignConfig,
+  size: string,
+  data: Record<string, unknown>,
+): CampaignConfig {
+  const [w, h] = size.split('x').map(Number);
+  const updated = structuredClone(baseConfig);
+
+  // Set size
+  updated.size = { width: w, height: h, preset: size as CampaignConfig['size']['preset'] };
+
+  // Apply AI response data
+  return applyAIResponse(updated, data);
 }
 
 // ── Map AI response onto CampaignConfig ──────────────────────────────────────

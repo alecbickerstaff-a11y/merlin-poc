@@ -213,3 +213,91 @@ input[type="range"]::-webkit-slider-thumb {
   opacity: 0.4;
   cursor: not-allowed;
 }
+
+/* ── Top Navigation Bar ── */
+.top-nav {
+  display: flex;
+  align-items: center;
+  height: 44px;
+  min-height: 44px;
+  padding: 0 16px;
+  background: var(--bg-darkest);
+  border-bottom: 1px solid var(--border);
+  gap: 24px;
+}
+
+.top-nav-logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.top-nav-logo span {
+  font-family: var(--font-montserrat), Montserrat, sans-serif;
+  font-weight: 800;
+  font-size: 14px;
+  letter-spacing: 2px;
+  color: var(--accent);
+}
+
+.top-nav-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.top-nav-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  font-family: var(--font-montserrat), Montserrat, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+  position: relative;
+}
+
+.top-nav-tab:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.top-nav-tab.active {
+  color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.top-nav-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: -7px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 20px;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 1px;
+}
+
+.top-nav-right {
+  margin-left: auto;
+}
+
+/* ── Placeholder views (Assets / Tracker before implementation) ── */
+.placeholder-view {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-secondary);
+  user-select: none;
+}

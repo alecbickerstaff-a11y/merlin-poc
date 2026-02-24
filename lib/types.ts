@@ -204,3 +204,120 @@ export interface BrandData {
   isiText: string;
   logoUrl?: string;
 }
+
+// =============================================================================
+// Workspace & Asset Management Types
+// =============================================================================
+
+// ---------------------------------------------------------------------------
+// WorkspaceView — the top-level navigation tabs
+// ---------------------------------------------------------------------------
+
+export type WorkspaceView = 'editor' | 'assets' | 'tracker';
+
+// ---------------------------------------------------------------------------
+// Asset — a saved banner with metadata, stored in the database
+// ---------------------------------------------------------------------------
+
+export interface AssetMetadata {
+  /** Which approved claims are used in this banner */
+  claimsUsed: string[];
+  /** Descriptors of imagery, e.g. "woman patient", "outdoor", "golden hour" */
+  imageryDescriptors: string[];
+  /** Classification of messaging approach */
+  messagingType: 'efficacy' | 'awareness' | 'brand' | 'hcp' | 'other';
+  /** Visual tone used during generation */
+  visualTone: string;
+  /** SHA-256 hash of ISI text for version tracking */
+  isiVersionHash: string;
+  /** Whether this was AI-generated or manually created */
+  generationSource: 'ai' | 'manual';
+  /** Freeform user-defined tags */
+  tags: string[];
+}
+
+export interface Asset {
+  id: string;
+  name: string;
+  config: CampaignConfig;
+  html: string;
+  thumbnailUrl?: string;
+  metadata: AssetMetadata;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ---------------------------------------------------------------------------
+// GenerationJob — tracks a multi-size generation request
+// ---------------------------------------------------------------------------
+
+export type GenerationStatus = 'pending' | 'generating' | 'complete' | 'error';
+
+export interface GenerationJob {
+  id: string;
+  size: string;
+  status: GenerationStatus;
+  config?: CampaignConfig;
+  html?: string;
+  error?: string;
+}
+
+export interface GenerationRequest {
+  keyMessage: string;
+  visualTone: string;
+  sizes: string[];
+}
+
+// ---------------------------------------------------------------------------
+// WorkspaceState — centralised app state managed by WorkspaceContext
+// ---------------------------------------------------------------------------
+
+export interface WorkspaceState {
+  /** Which top-level view is active */
+  activeView: WorkspaceView;
+
+  /** Current config being edited */
+  editorConfig: CampaignConfig;
+
+  /** Active generation jobs (multi-size) */
+  generationJobs: GenerationJob[];
+
+  /** Whether any generation is in progress */
+  isGenerating: boolean;
+
+  /** Saved assets loaded from the database */
+  assets: Asset[];
+
+  /** Filters for the asset gallery */
+  assetFilters: AssetFilters;
+
+  /** Tracker dashboard data */
+  trackerData: TrackerData | null;
+}
+
+// ---------------------------------------------------------------------------
+// AssetFilters — filters for the asset gallery view
+// ---------------------------------------------------------------------------
+
+export interface AssetFilters {
+  search: string;
+  size: string | null;
+  visualTone: string | null;
+  messagingType: string | null;
+  dateRange: { from: string | null; to: string | null };
+}
+
+// ---------------------------------------------------------------------------
+// TrackerData — aggregated analytics for the tracker dashboard
+// ---------------------------------------------------------------------------
+
+export interface TrackerData {
+  totalAssets: number;
+  sizeDistribution: Record<string, number>;
+  toneDistribution: Record<string, number>;
+  claimsUsage: Record<string, number>;
+  imageryTypes: Record<string, number>;
+  messagingTypes: Record<string, number>;
+  recentActivity: Asset[];
+  generationTimeline: Array<{ date: string; count: number }>;
+}
