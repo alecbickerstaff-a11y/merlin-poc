@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import type { GenerationJob } from '../../lib/types';
 import { generateBannerHTML } from '../../lib/banner-template';
 
@@ -17,8 +17,31 @@ interface Props {
 export default function BannerCard({ job, isSelected, onSelect }: Props) {
   const { size, status, config, error } = job;
   const [w, h] = size.split('x').map(Number);
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
 
   const html = config ? generateBannerHTML(config) : null;
+
+  const saveToAssets = useCallback(async () => {
+    if (!html || !config) return;
+    setSaveState('saving');
+    try {
+      const res = await fetch('/api/assets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ config, html, generationSource: 'ai' }),
+      });
+      if (res.ok) {
+        setSaveState('saved');
+        setTimeout(() => setSaveState('idle'), 3000);
+      } else {
+        setSaveState('error');
+        setTimeout(() => setSaveState('idle'), 3000);
+      }
+    } catch {
+      setSaveState('error');
+      setTimeout(() => setSaveState('idle'), 3000);
+    }
+  }, [config, html]);
 
   const downloadHTML = useCallback(() => {
     if (!html) return;
@@ -137,24 +160,45 @@ export default function BannerCard({ job, isSelected, onSelect }: Props) {
         </div>
 
         {status === 'complete' && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              downloadHTML();
-            }}
-            style={{
-              background: 'var(--bg-mid)',
-              border: '1px solid var(--border-light)',
-              color: 'var(--text-secondary)',
-              borderRadius: '4px',
-              padding: '3px 8px',
-              fontSize: '9px',
-              cursor: 'pointer',
-              transition: 'all 0.15s',
-            }}
-          >
-            Download
-          </button>
+          <div style={{ display: 'flex', gap: '4px' }}>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                saveToAssets();
+              }}
+              disabled={saveState === 'saving'}
+              style={{
+                background: saveState === 'saved' ? 'rgba(39,174,96,0.2)' : 'var(--accent-dim)',
+                border: `1px solid ${saveState === 'saved' ? 'rgba(39,174,96,0.4)' : 'var(--accent)'}`,
+                color: saveState === 'saved' ? '#27AE60' : 'var(--accent)',
+                borderRadius: '4px',
+                padding: '3px 8px',
+                fontSize: '9px',
+                cursor: saveState === 'saving' ? 'wait' : 'pointer',
+                transition: 'all 0.15s',
+              }}
+            >
+              {saveState === 'saving' ? '...' : saveState === 'saved' ? '✓' : saveState === 'error' ? '!' : 'Save'}
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                downloadHTML();
+              }}
+              style={{
+                background: 'var(--bg-mid)',
+                border: '1px solid var(--border-light)',
+                color: 'var(--text-secondary)',
+                borderRadius: '4px',
+                padding: '3px 8px',
+                fontSize: '9px',
+                cursor: 'pointer',
+                transition: 'all 0.15s',
+              }}
+            >
+              DL
+            </button>
+          </div>
         )}
       </div>
     </div>

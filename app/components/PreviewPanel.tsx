@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import type { CampaignConfig } from '../../lib/types';
 
 interface Props {
@@ -11,6 +11,8 @@ interface Props {
 
 export default function PreviewPanel({ config, html, onReset }: Props) {
   const { width, height } = config.size;
+  const [saving, setSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saved' | 'error'>('idle');
 
   const downloadHTML = useCallback(() => {
     const blob = new Blob([html], { type: 'text/html' });
@@ -37,6 +39,37 @@ export default function PreviewPanel({ config, html, onReset }: Props) {
       alert('HTML copied to clipboard!');
     }
   }, [html]);
+
+  const saveToAssets = useCallback(async () => {
+    setSaving(true);
+    setSaveStatus('idle');
+    try {
+      const res = await fetch('/api/assets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          config,
+          html,
+          generationSource: 'ai',
+        }),
+      });
+
+      if (res.ok) {
+        setSaveStatus('saved');
+        setTimeout(() => setSaveStatus('idle'), 3000);
+      } else {
+        const data = await res.json();
+        console.error('Save failed:', data.error);
+        setSaveStatus('error');
+        setTimeout(() => setSaveStatus('idle'), 3000);
+      }
+    } catch {
+      setSaveStatus('error');
+      setTimeout(() => setSaveStatus('idle'), 3000);
+    } finally {
+      setSaving(false);
+    }
+  }, [config, html]);
 
   return (
     <div
@@ -110,7 +143,15 @@ export default function PreviewPanel({ config, html, onReset }: Props) {
         </span>
 
         <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-          <button className="action-btn primary" onClick={downloadHTML} style={{ fontSize: '10px', padding: '5px 10px' }}>
+          <button
+            className="action-btn primary"
+            onClick={saveToAssets}
+            disabled={saving}
+            style={{ fontSize: '10px', padding: '5px 10px' }}
+          >
+            {saving ? 'Saving...' : saveStatus === 'saved' ? '✓ Saved' : saveStatus === 'error' ? 'DB Not Set Up' : 'Save to Assets'}
+          </button>
+          <button className="action-btn" onClick={downloadHTML} style={{ fontSize: '10px', padding: '5px 10px' }}>
             Download HTML
           </button>
           <button className="action-btn" disabled title="Coming soon" style={{ fontSize: '10px', padding: '5px 10px' }}>
