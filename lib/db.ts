@@ -12,9 +12,17 @@ let pool: Pool | null = null;
 
 function getPool(): Pool {
   if (!pool) {
+    // Strip sslmode from the connection string — we handle SSL ourselves
+    const connStr = (process.env.POSTGRES_URL || '')
+      .replace(/[?&]sslmode=[^&]*/g, '')
+      .replace(/[?&]supa=[^&]*/g, '')
+      .replace(/\?$/, '');
+
     pool = new Pool({
-      connectionString: process.env.POSTGRES_URL,
-      ssl: { rejectUnauthorized: false },
+      connectionString: connStr,
+      ssl: process.env.POSTGRES_URL?.includes('supabase')
+        ? { rejectUnauthorized: false }
+        : false,
       max: 5,
     });
   }
