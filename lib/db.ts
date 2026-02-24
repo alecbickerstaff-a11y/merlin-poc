@@ -1,10 +1,25 @@
 // =============================================================================
 // MERLIN — Database Helpers
-// CRUD operations for assets using @vercel/postgres.
+// CRUD operations for assets using pg (node-postgres).
 // =============================================================================
 
-import { sql } from '@vercel/postgres';
+import { Pool } from 'pg';
 import type { Asset, AssetMetadata, CampaignConfig } from './types';
+
+// ── Connection pool (lazy init) ─────────────────────────────────────────────
+
+let pool: Pool | null = null;
+
+function getPool(): Pool {
+  if (!pool) {
+    pool = new Pool({
+      connectionString: process.env.POSTGRES_URL,
+      ssl: { rejectUnauthorized: false },
+      max: 5,
+    });
+  }
+  return pool;
+}
 
 // ── Check if database is configured ─────────────────────────────────────────
 
@@ -29,10 +44,10 @@ function rowToAsset(row: AssetRow): Asset {
   return {
     id: row.id,
     name: row.name,
-    config: row.config,
+    config: typeof row.config === 'string' ? JSON.parse(row.config) : row.config,
     html: row.html,
     thumbnailUrl: row.thumbnail_url || undefined,
-    metadata: row.metadata,
+    metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -53,6 +68,7 @@ export async function listAssets(opts: ListAssetsOptions = {}): Promise<{
   assets: Asset[];
   total: number;
 }> {
+  const db = getPool();
   const limit = opts.limit || 50;
   const offset = opts.offset || 0;
 
@@ -87,13 +103,12 @@ export async function listAssets(opts: ListAssetsOptions = {}): Promise<{
 
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-  // Use template literal sql for the simple query, but we need raw query for dynamic WHERE
-  const countResult = await sql.query(
+  const countResult = await db.query(
     `SELECT COUNT(*) as total FROM assets ${whereClause}`,
     values,
   );
 
-  const dataResult = await sql.query(
+  const dataResult = await db.query(
     `SELECT * FROM assets ${whereClause} ORDER BY created_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
     [...values, limit, offset],
   );
@@ -107,7 +122,8 @@ export async function listAssets(opts: ListAssetsOptions = {}): Promise<{
 // ── Get single asset ────────────────────────────────────────────────────────
 
 export async function getAsset(id: string): Promise<Asset | null> {
-  const result = await sql`SELECT * FROM assets WHERE id = ${id}`;
+  const db = getPool();
+  const result = await db.query('SELECT * FROM assets WHERE id = $1', [id]);
   if (result.rows.length === 0) return null;
   return rowToAsset(result.rows[0] as unknown as AssetRow);
 }
@@ -121,17 +137,19 @@ export async function createAsset(data: {
   thumbnailUrl?: string;
   metadata: AssetMetadata;
 }): Promise<Asset> {
-  const result = await sql`
-    INSERT INTO assets (name, config, html, thumbnail_url, metadata)
-    VALUES (
-      ${data.name},
-      ${JSON.stringify(data.config)}::jsonb,
-      ${data.html},
-      ${data.thumbnailUrl || null},
-      ${JSON.stringify(data.metadata)}::jsonb
-    )
-    RETURNING *
-  `;
+  const db = getPool();
+  const result = await db.query(
+    `INSERT INTO assets (name, config, html, thumbnail_url, metadata)
+     VALUES ($1, $2::jsonb, $3, $4, $5::jsonb)
+     RETURNING *`,
+    [
+      data.name,
+      JSON.stringify(data.config),
+      data.html,
+      data.thumbnailUrl || null,
+      JSON.stringify(data.metadata),
+    ],
+  );
   return rowToAsset(result.rows[0] as unknown as AssetRow);
 }
 
@@ -147,7 +165,7 @@ export async function updateAsset(
     metadata?: AssetMetadata;
   },
 ): Promise<Asset | null> {
-  // Build SET clauses dynamically
+  const db = getPool();
   const sets: string[] = ['updated_at = NOW()'];
   const values: unknown[] = [];
   let paramIndex = 1;
@@ -180,7 +198,7 @@ export async function updateAsset(
 
   values.push(id);
 
-  const result = await sql.query(
+  const result = await db.query(
     `UPDATE assets SET ${sets.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
     values,
   );
@@ -192,7 +210,8 @@ export async function updateAsset(
 // ── Delete asset ────────────────────────────────────────────────────────────
 
 export async function deleteAsset(id: string): Promise<boolean> {
-  const result = await sql`DELETE FROM assets WHERE id = ${id}`;
+  const db = getPool();
+  const result = await db.query('DELETE FROM assets WHERE id = $1', [id]);
   return (result.rowCount ?? 0) > 0;
 }
 
@@ -206,17 +225,19 @@ export async function logGeneration(data: {
   brand?: string;
   claimsUsed?: string[];
 }): Promise<void> {
-  await sql`
-    INSERT INTO generation_logs (asset_id, key_message, visual_tone, size, brand, claims_used)
-    VALUES (
-      ${data.assetId || null},
-      ${data.keyMessage},
-      ${data.visualTone},
-      ${data.size},
-      ${data.brand || null},
-      ${JSON.stringify(data.claimsUsed || [])}::jsonb
-    )
-  `;
+  const db = getPool();
+  await db.query(
+    `INSERT INTO generation_logs (asset_id, key_message, visual_tone, size, brand, claims_used)
+     VALUES ($1, $2, $3, $4, $5, $6::jsonb)`,
+    [
+      data.assetId || null,
+      data.keyMessage,
+      data.visualTone,
+      data.size,
+      data.brand || null,
+      JSON.stringify(data.claimsUsed || []),
+    ],
+  );
 }
 
 // ── Tracker aggregation queries ─────────────────────────────────────────────
@@ -231,6 +252,8 @@ export async function getTrackerData(): Promise<{
   recentActivity: Asset[];
   generationTimeline: Array<{ date: string; count: number }>;
 }> {
+  const db = getPool();
+
   const [
     totalResult,
     sizeResult,
@@ -239,23 +262,23 @@ export async function getTrackerData(): Promise<{
     recentResult,
     timelineResult,
   ] = await Promise.all([
-    sql`SELECT COUNT(*) as total FROM assets`,
-    sql`SELECT config->'size'->>'preset' as size, COUNT(*) as count FROM assets GROUP BY config->'size'->>'preset'`,
-    sql`SELECT metadata->>'visualTone' as tone, COUNT(*) as count FROM assets GROUP BY metadata->>'visualTone'`,
-    sql`SELECT metadata->>'messagingType' as type, COUNT(*) as count FROM assets GROUP BY metadata->>'messagingType'`,
-    sql`SELECT * FROM assets ORDER BY created_at DESC LIMIT 10`,
-    sql`SELECT DATE(created_at) as date, COUNT(*) as count FROM assets GROUP BY DATE(created_at) ORDER BY date DESC LIMIT 30`,
+    db.query('SELECT COUNT(*) as total FROM assets'),
+    db.query(`SELECT config->'size'->>'preset' as size, COUNT(*) as count FROM assets GROUP BY config->'size'->>'preset'`),
+    db.query(`SELECT metadata->>'visualTone' as tone, COUNT(*) as count FROM assets GROUP BY metadata->>'visualTone'`),
+    db.query(`SELECT metadata->>'messagingType' as type, COUNT(*) as count FROM assets GROUP BY metadata->>'messagingType'`),
+    db.query('SELECT * FROM assets ORDER BY created_at DESC LIMIT 10'),
+    db.query(`SELECT DATE(created_at) as date, COUNT(*) as count FROM assets GROUP BY DATE(created_at) ORDER BY date DESC LIMIT 30`),
   ]);
 
-  // Claims usage — need to unnest the JSONB array
+  // Claims usage — unnest JSONB array
   let claimsUsage: Record<string, number> = {};
   try {
-    const claimsResult = await sql`
+    const claimsResult = await db.query(`
       SELECT claim, COUNT(*) as count
       FROM assets, jsonb_array_elements_text(metadata->'claimsUsed') AS claim
       GROUP BY claim
       ORDER BY count DESC
-    `;
+    `);
     claimsUsage = Object.fromEntries(
       claimsResult.rows.map((r) => [r.claim, parseInt(r.count as string, 10)]),
     );
@@ -266,12 +289,12 @@ export async function getTrackerData(): Promise<{
   // Imagery types — unnest
   let imageryTypes: Record<string, number> = {};
   try {
-    const imageryResult = await sql`
+    const imageryResult = await db.query(`
       SELECT descriptor, COUNT(*) as count
       FROM assets, jsonb_array_elements_text(metadata->'imageryDescriptors') AS descriptor
       GROUP BY descriptor
       ORDER BY count DESC
-    `;
+    `);
     imageryTypes = Object.fromEntries(
       imageryResult.rows.map((r) => [r.descriptor, parseInt(r.count as string, 10)]),
     );
