@@ -79,7 +79,10 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// ── Helper: call the n8n webhook for a single size ──────────────────────────
+// ── Helper: call the n8n webhook for a single size (with retry) ─────────────
+
+const MAX_RETRIES = 3;
+const RETRY_DELAY_MS = 5_000; // 5 seconds between retries
 
 async function callN8N(
   webhookUrl: string,
@@ -87,31 +90,54 @@ async function callN8N(
   visualTone: string,
   size: string,
 ): Promise<Record<string, unknown>> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 120_000);
+  let lastError: Error | null = null;
 
-  try {
-    const response = await fetch(webhookUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        keyMessage,
-        visualTone: visualTone || 'Warm & Hopeful',
-        size,
-      }),
-      signal: controller.signal,
-    });
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 120_000);
 
-    clearTimeout(timeoutId);
+    try {
+      const response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          keyMessage,
+          visualTone: visualTone || 'Warm & Hopeful',
+          size,
+        }),
+        signal: controller.signal,
+      });
 
-    if (!response.ok) {
-      const errText = await response.text().catch(() => 'Unknown error');
-      throw new Error(`n8n webhook returned ${response.status}: ${errText}`);
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errText = await response.text().catch(() => 'Unknown error');
+        lastError = new Error(`n8n webhook returned ${response.status}: ${errText}`);
+
+        // Retry on 500/502/503/529 (server errors / overloaded)
+        if ([500, 502, 503, 529].includes(response.status) && attempt < MAX_RETRIES) {
+          console.log(`[generate] Attempt ${attempt}/${MAX_RETRIES} failed for ${size}, retrying in ${RETRY_DELAY_MS / 1000}s...`);
+          await new Promise((r) => setTimeout(r, RETRY_DELAY_MS * attempt));
+          continue;
+        }
+
+        throw lastError;
+      }
+
+      return await response.json();
+    } catch (err) {
+      clearTimeout(timeoutId);
+      lastError = err instanceof Error ? err : new Error(String(err));
+
+      // Don't retry on abort (timeout) or if last attempt
+      if (lastError.name === 'AbortError' || attempt >= MAX_RETRIES) {
+        throw lastError;
+      }
+
+      console.log(`[generate] Attempt ${attempt}/${MAX_RETRIES} error for ${size}, retrying in ${RETRY_DELAY_MS / 1000}s...`);
+      await new Promise((r) => setTimeout(r, RETRY_DELAY_MS * attempt));
     }
-
-    return await response.json();
-  } catch (err) {
-    clearTimeout(timeoutId);
-    throw err;
   }
+
+  throw lastError || new Error('All retry attempts failed');
 }
