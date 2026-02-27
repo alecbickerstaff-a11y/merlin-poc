@@ -291,6 +291,7 @@ export type SectionType =
   | 'hero'
   | 'headline'
   | 'body_text'
+  | 'visualization'
   | 'stat_callout'
   | 'icon_row'
   | 'icon_flow'
@@ -325,6 +326,7 @@ export type SectionData =
   | HeroSectionData
   | HeadlineSectionData
   | BodyTextSectionData
+  | VisualizationSectionData
   | StatCalloutSectionData
   | IconRowSectionData
   | IconFlowSectionData
@@ -361,6 +363,29 @@ export interface BodyTextSectionData {
   type: 'body_text';
   text: string;
   bullets?: boolean;
+}
+
+/**
+ * Visualization — the primary way to place visual content (charts, tables, stats,
+ * diagrams) in a leave-behind. Users upload pre-approved PNGs to the Artifact
+ * Library and pick them here — like inserting a screenshot into a document.
+ */
+export interface VisualizationSectionData {
+  type: 'visualization';
+  /** The artifact ID from the Artifacts library */
+  artifactId?: string;
+  /** Cached artifact file URL for rendering */
+  artifactUrl?: string;
+  /** Optional title above the visualization */
+  title?: string;
+  /** Optional caption below the visualization */
+  caption?: string;
+  /** Optional footnote text (e.g., "p<0.001 vs placebo") */
+  footnote?: string;
+  /** Alt text for accessibility */
+  alt: string;
+  /** How the image should fit: contain (default) or cover */
+  fit?: 'contain' | 'cover';
 }
 
 export interface StatCalloutSectionData {
@@ -409,6 +434,8 @@ export interface BarChartSectionData {
   }>;
   /** Use an uploaded PNG instead of rendering */
   artifactId?: string;
+  /** Cached artifact file URL for rendering */
+  artifactUrl?: string;
 }
 
 export interface LineChartSectionData {
@@ -423,6 +450,8 @@ export interface LineChartSectionData {
   }>;
   /** Use an uploaded PNG instead of rendering */
   artifactId?: string;
+  /** Cached artifact file URL for rendering */
+  artifactUrl?: string;
 }
 
 export interface DonutChartSectionData {
@@ -436,6 +465,8 @@ export interface DonutChartSectionData {
   }>;
   /** Use an uploaded PNG instead of rendering */
   artifactId?: string;
+  /** Cached artifact file URL for rendering */
+  artifactUrl?: string;
 }
 
 export interface DataTableSectionData {
@@ -449,6 +480,8 @@ export interface DataTableSectionData {
   }>;
   /** Use an uploaded PNG instead of rendering */
   artifactId?: string;
+  /** Cached artifact file URL for rendering */
+  artifactUrl?: string;
 }
 
 export interface DosingTimelineSectionData {
@@ -465,6 +498,8 @@ export interface DosingTimelineSectionData {
 export interface ImageBlockSectionData {
   type: 'image_block';
   artifactId?: string;
+  /** Cached artifact file URL for rendering */
+  artifactUrl?: string;
   caption?: string;
   alt: string;
 }
@@ -475,6 +510,8 @@ export interface CTABlockSectionData {
   style: 'button' | 'banner' | 'callout';
   url?: string;
   artifactId?: string;
+  /** Cached artifact file URL for rendering */
+  artifactUrl?: string;
 }
 
 export interface ISIBlockSectionData {

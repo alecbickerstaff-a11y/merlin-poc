@@ -3,6 +3,7 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useWorkspace, DEFAULT_FLASHCARD_CONFIG } from '../context/WorkspaceContext';
 import { generateFlashcardHTML } from '../../lib/flashcard-template';
+import ArtifactPicker from './ArtifactPicker';
 import type {
   FlashcardConfig,
   FlashcardPage,
@@ -11,6 +12,7 @@ import type {
   SectionData,
   SystemGraphicPreset,
   PageSize,
+  ArtifactCategory,
 } from '../../lib/types';
 
 // =============================================================================
@@ -26,257 +28,257 @@ interface SectionTemplate {
   createData: () => SectionData;
 }
 
-const SECTION_TEMPLATES: SectionTemplate[] = [
+// ── Template groups for sidebar organization ──────────────────────────────
+
+interface TemplateGroup {
+  label: string;
+  templates: SectionTemplate[];
+}
+
+const TEMPLATE_GROUPS: TemplateGroup[] = [
   {
-    type: 'hero',
-    label: 'Hero',
-    icon: '🏔',
-    description: 'Large headline with optional photography',
-    defaultColSpan: 12,
-    createData: () => ({
-      type: 'hero' as const,
-      headline: 'Enter headline',
-      subheadline: '',
-      eyebrow: '',
-    }),
+    label: 'Text',
+    templates: [
+      {
+        type: 'hero',
+        label: 'Hero',
+        icon: '🏔',
+        description: 'Large headline with optional photography',
+        defaultColSpan: 12,
+        createData: () => ({
+          type: 'hero' as const,
+          headline: 'Enter headline',
+          subheadline: '',
+          eyebrow: '',
+        }),
+      },
+      {
+        type: 'headline',
+        label: 'Headline',
+        icon: 'H',
+        description: 'Section header text',
+        defaultColSpan: 12,
+        createData: () => ({
+          type: 'headline' as const,
+          text: 'Section headline',
+          level: 'h2' as const,
+        }),
+      },
+      {
+        type: 'body_text',
+        label: 'Body Text',
+        icon: '¶',
+        description: 'Paragraph or bullet points',
+        defaultColSpan: 12,
+        createData: () => ({
+          type: 'body_text' as const,
+          text: 'Enter body text here.',
+          bullets: false,
+        }),
+      },
+    ],
   },
   {
-    type: 'headline',
-    label: 'Headline',
-    icon: 'H',
-    description: 'Section header text',
-    defaultColSpan: 12,
-    createData: () => ({
-      type: 'headline' as const,
-      text: 'Section headline',
-      level: 'h2' as const,
-    }),
-  },
-  {
-    type: 'body_text',
-    label: 'Body Text',
-    icon: '¶',
-    description: 'Paragraph or bullet points',
-    defaultColSpan: 12,
-    createData: () => ({
-      type: 'body_text' as const,
-      text: 'Enter body text here.',
-      bullets: false,
-    }),
-  },
-  {
-    type: 'stat_callout',
-    label: 'Stat Callout',
-    icon: '%',
-    description: 'Large numbers with labels',
-    defaultColSpan: 12,
-    createData: () => ({
-      type: 'stat_callout' as const,
-      stats: [
-        { value: '52%', label: 'Primary endpoint', sublabel: 'at Week 24', style: 'circle' as const },
-        { value: '28%', label: 'Secondary endpoint', sublabel: 'at Week 24', style: 'circle' as const },
-      ],
-    }),
-  },
-  {
-    type: 'bar_chart',
-    label: 'Bar Chart',
-    icon: '📊',
-    description: 'Vertical or horizontal bar chart',
-    defaultColSpan: 12,
-    createData: () => ({
-      type: 'bar_chart' as const,
-      title: 'Chart Title',
-      orientation: 'vertical' as const,
-      groups: [
-        {
-          label: 'Week 24',
-          bars: [
-            { label: 'Product', value: 52, isProduct: true },
-            { label: 'Placebo', value: 28, isProduct: false },
+    label: 'Visual',
+    templates: [
+      {
+        type: 'visualization',
+        label: 'Visualization',
+        icon: '📊',
+        description: 'Chart, table, stat — pick from artifacts',
+        defaultColSpan: 12,
+        createData: () => ({
+          type: 'visualization' as const,
+          alt: 'Visualization',
+          title: '',
+          caption: '',
+          footnote: '',
+          fit: 'contain' as const,
+        }),
+      },
+      {
+        type: 'image_block',
+        label: 'Image',
+        icon: '🖼',
+        description: 'Photography or graphic from artifacts',
+        defaultColSpan: 6,
+        createData: () => ({
+          type: 'image_block' as const,
+          alt: 'Image description',
+          caption: '',
+        }),
+      },
+      {
+        type: 'icon_row',
+        label: 'Icon Row',
+        icon: '⬡',
+        description: 'Row of icons with labels',
+        defaultColSpan: 12,
+        createData: () => ({
+          type: 'icon_row' as const,
+          icons: [
+            { label: 'Feature 1', sublabel: 'Description' },
+            { label: 'Feature 2', sublabel: 'Description' },
+            { label: 'Feature 3', sublabel: 'Description' },
           ],
-        },
-      ],
-    }),
-  },
-  {
-    type: 'line_chart',
-    label: 'Line Chart',
-    icon: '📈',
-    description: 'Time-series line chart',
-    defaultColSpan: 12,
-    createData: () => ({
-      type: 'line_chart' as const,
-      title: 'Response Over Time',
-      lines: [
-        {
-          label: 'Product',
-          isProduct: true,
-          dataPoints: [
-            { x: 'Wk 0', y: 0 },
-            { x: 'Wk 12', y: 35 },
-            { x: 'Wk 24', y: 52 },
+        }),
+      },
+      {
+        type: 'icon_flow',
+        label: 'Icon Flow',
+        icon: '→',
+        description: 'Sequential steps with connectors',
+        defaultColSpan: 12,
+        createData: () => ({
+          type: 'icon_flow' as const,
+          steps: [
+            { title: 'Step 1', description: 'First step' },
+            { title: 'Step 2', description: 'Second step' },
+            { title: 'Step 3', description: 'Third step' },
           ],
-        },
-        {
-          label: 'Placebo',
-          isProduct: false,
-          dataPoints: [
-            { x: 'Wk 0', y: 0 },
-            { x: 'Wk 12', y: 18 },
-            { x: 'Wk 24', y: 28 },
+          showConnectors: true,
+        }),
+      },
+      {
+        type: 'cta_block',
+        label: 'CTA',
+        icon: '🔗',
+        description: 'Call-to-action button or banner',
+        defaultColSpan: 12,
+        createData: () => ({
+          type: 'cta_block' as const,
+          text: 'Learn More',
+          style: 'button' as const,
+        }),
+      },
+    ],
+  },
+  {
+    label: 'Data',
+    templates: [
+      {
+        type: 'stat_callout',
+        label: 'Stat Callout',
+        icon: '%',
+        description: 'Large numbers with labels',
+        defaultColSpan: 12,
+        createData: () => ({
+          type: 'stat_callout' as const,
+          stats: [
+            { value: '52%', label: 'Primary endpoint', sublabel: 'at Week 24', style: 'circle' as const },
+            { value: '28%', label: 'Secondary endpoint', sublabel: 'at Week 24', style: 'circle' as const },
           ],
-        },
-      ],
-    }),
+        }),
+      },
+      {
+        type: 'bar_chart',
+        label: 'Bar Chart',
+        icon: '▥',
+        description: 'CSS bar chart — or use artifact image',
+        defaultColSpan: 12,
+        createData: () => ({
+          type: 'bar_chart' as const,
+          title: 'Chart Title',
+          orientation: 'vertical' as const,
+          groups: [
+            {
+              label: 'Week 24',
+              bars: [
+                { label: 'Product', value: 52, isProduct: true },
+                { label: 'Placebo', value: 28, isProduct: false },
+              ],
+            },
+          ],
+        }),
+      },
+      {
+        type: 'data_table',
+        label: 'Data Table',
+        icon: '📋',
+        description: 'Structured data — or use artifact image',
+        defaultColSpan: 12,
+        createData: () => ({
+          type: 'data_table' as const,
+          title: 'Efficacy Results',
+          headers: ['Endpoint', 'Product', 'Placebo', 'p-value'],
+          rows: [
+            { cells: ['ACR20 Wk 24', '52%', '28%', '<0.001'], isProduct: false, isHighlighted: true },
+            { cells: ['ACR50 Wk 24', '30%', '12%', '<0.001'], isProduct: false },
+          ],
+        }),
+      },
+      {
+        type: 'dosing_timeline',
+        label: 'Dosing Timeline',
+        icon: '💊',
+        description: 'Treatment phases and dosing',
+        defaultColSpan: 12,
+        createData: () => ({
+          type: 'dosing_timeline' as const,
+          title: 'Dosing Schedule',
+          phases: [
+            { label: 'Induction', duration: 'Weeks 0-8', frequency: 'Every 2 weeks' },
+            { label: 'Maintenance', duration: 'Weeks 8+', frequency: 'Every 8 weeks' },
+          ],
+        }),
+      },
+    ],
   },
   {
-    type: 'donut_chart',
-    label: 'Donut Chart',
-    icon: '🍩',
-    description: 'Circular percentage charts',
-    defaultColSpan: 6,
-    createData: () => ({
-      type: 'donut_chart' as const,
-      charts: [
-        { label: 'Product', value: 52, total: 100, isProduct: true },
-        { label: 'Placebo', value: 28, total: 100, isProduct: false },
-      ],
-    }),
-  },
-  {
-    type: 'data_table',
-    label: 'Data Table',
-    icon: '📋',
-    description: 'Structured data rows and columns',
-    defaultColSpan: 12,
-    createData: () => ({
-      type: 'data_table' as const,
-      title: 'Efficacy Results',
-      headers: ['Endpoint', 'Product', 'Placebo', 'p-value'],
-      rows: [
-        { cells: ['ACR20 Wk 24', '52%', '28%', '<0.001'], isProduct: false, isHighlighted: true },
-        { cells: ['ACR50 Wk 24', '30%', '12%', '<0.001'], isProduct: false },
-      ],
-    }),
-  },
-  {
-    type: 'icon_row',
-    label: 'Icon Row',
-    icon: '⬡',
-    description: 'Row of icons with labels',
-    defaultColSpan: 12,
-    createData: () => ({
-      type: 'icon_row' as const,
-      icons: [
-        { label: 'Feature 1', sublabel: 'Description' },
-        { label: 'Feature 2', sublabel: 'Description' },
-        { label: 'Feature 3', sublabel: 'Description' },
-      ],
-    }),
-  },
-  {
-    type: 'icon_flow',
-    label: 'Icon Flow',
-    icon: '→',
-    description: 'Sequential steps with connectors',
-    defaultColSpan: 12,
-    createData: () => ({
-      type: 'icon_flow' as const,
-      steps: [
-        { title: 'Step 1', description: 'First step' },
-        { title: 'Step 2', description: 'Second step' },
-        { title: 'Step 3', description: 'Third step' },
-      ],
-      showConnectors: true,
-    }),
-  },
-  {
-    type: 'dosing_timeline',
-    label: 'Dosing Timeline',
-    icon: '💊',
-    description: 'Treatment phases and dosing',
-    defaultColSpan: 12,
-    createData: () => ({
-      type: 'dosing_timeline' as const,
-      title: 'Dosing Schedule',
-      phases: [
-        { label: 'Induction', duration: 'Weeks 0-8', frequency: 'Every 2 weeks' },
-        { label: 'Maintenance', duration: 'Weeks 8+', frequency: 'Every 8 weeks' },
-      ],
-    }),
-  },
-  {
-    type: 'image_block',
-    label: 'Image',
-    icon: '🖼',
-    description: 'Upload or artifact image',
-    defaultColSpan: 6,
-    createData: () => ({
-      type: 'image_block' as const,
-      alt: 'Image description',
-      caption: '',
-    }),
-  },
-  {
-    type: 'cta_block',
-    label: 'CTA',
-    icon: '🔗',
-    description: 'Call-to-action button or banner',
-    defaultColSpan: 12,
-    createData: () => ({
-      type: 'cta_block' as const,
-      text: 'Learn More',
-      style: 'button' as const,
-    }),
-  },
-  {
-    type: 'isi_block',
-    label: 'ISI',
-    icon: '⚠',
-    description: 'Important Safety Information',
-    defaultColSpan: 12,
-    createData: () => ({
-      type: 'isi_block' as const,
-      variant: 'full' as const,
-    }),
-  },
-  {
-    type: 'references',
-    label: 'References',
-    icon: '#',
-    description: 'Footnote references',
-    defaultColSpan: 12,
-    createData: () => ({
-      type: 'references' as const,
-      items: ['Reference 1.', 'Reference 2.'],
-    }),
-  },
-  {
-    type: 'footer',
-    label: 'Footer',
-    icon: '▬',
-    description: 'Logo, job code, legal line',
-    defaultColSpan: 12,
-    createData: () => ({
-      type: 'footer' as const,
-      jobCode: 'XX-XXXXX-XXXX',
-      date: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
-      legalLine: '© 2026 Brand Name. All rights reserved.',
-    }),
-  },
-  {
-    type: 'divider',
-    label: 'Divider',
-    icon: '—',
-    description: 'Line, space, or accent separator',
-    defaultColSpan: 12,
-    createData: () => ({
-      type: 'divider' as const,
-      style: 'line' as const,
-    }),
+    label: 'Structure',
+    templates: [
+      {
+        type: 'isi_block',
+        label: 'ISI',
+        icon: '⚠',
+        description: 'Important Safety Information',
+        defaultColSpan: 12,
+        createData: () => ({
+          type: 'isi_block' as const,
+          variant: 'full' as const,
+        }),
+      },
+      {
+        type: 'references',
+        label: 'References',
+        icon: '#',
+        description: 'Footnote references',
+        defaultColSpan: 12,
+        createData: () => ({
+          type: 'references' as const,
+          items: ['Reference 1.', 'Reference 2.'],
+        }),
+      },
+      {
+        type: 'footer',
+        label: 'Footer',
+        icon: '▬',
+        description: 'Logo, job code, legal line',
+        defaultColSpan: 12,
+        createData: () => ({
+          type: 'footer' as const,
+          jobCode: 'XX-XXXXX-XXXX',
+          date: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+          legalLine: '© 2026 Brand Name. All rights reserved.',
+        }),
+      },
+      {
+        type: 'divider',
+        label: 'Divider',
+        icon: '—',
+        description: 'Line, space, or accent separator',
+        defaultColSpan: 12,
+        createData: () => ({
+          type: 'divider' as const,
+          style: 'line' as const,
+        }),
+      },
+    ],
   },
 ];
+
+// Flatten for lookups
+const SECTION_TEMPLATES: SectionTemplate[] = TEMPLATE_GROUPS.flatMap((g) => g.templates);
 
 // =============================================================================
 // Page size options
@@ -371,15 +373,28 @@ function SectionCard({
         {section.data.type === 'hero' && section.data.headline}
         {section.data.type === 'headline' && section.data.text}
         {section.data.type === 'body_text' && section.data.text.slice(0, 60) + (section.data.text.length > 60 ? '...' : '')}
+        {section.data.type === 'visualization' && (
+          <span>
+            {section.data.artifactId
+              ? <span style={{ color: 'var(--accent)' }}>{section.data.title || 'Artifact linked'}</span>
+              : <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>No artifact selected</span>}
+          </span>
+        )}
         {section.data.type === 'stat_callout' && `${section.data.stats.length} stat(s)`}
-        {section.data.type === 'bar_chart' && section.data.title}
+        {section.data.type === 'bar_chart' && (
+          <span>{section.data.artifactId ? <span style={{ color: 'var(--accent)' }}>{section.data.title}</span> : section.data.title}</span>
+        )}
         {section.data.type === 'line_chart' && section.data.title}
         {section.data.type === 'donut_chart' && `${section.data.charts.length} chart(s)`}
-        {section.data.type === 'data_table' && section.data.title}
+        {section.data.type === 'data_table' && (
+          <span>{section.data.artifactId ? <span style={{ color: 'var(--accent)' }}>{section.data.title}</span> : section.data.title}</span>
+        )}
         {section.data.type === 'icon_row' && `${section.data.icons.length} icon(s)`}
         {section.data.type === 'icon_flow' && `${section.data.steps.length} step(s)`}
         {section.data.type === 'dosing_timeline' && section.data.title}
-        {section.data.type === 'image_block' && section.data.alt}
+        {section.data.type === 'image_block' && (
+          <span>{section.data.artifactId ? <span style={{ color: 'var(--accent)' }}>Artifact linked</span> : section.data.alt}</span>
+        )}
         {section.data.type === 'cta_block' && section.data.text}
         {section.data.type === 'isi_block' && `ISI — ${section.data.variant}`}
         {section.data.type === 'references' && `${section.data.items.length} ref(s)`}
@@ -693,53 +708,57 @@ export default function FlashcardEditor() {
           </select>
         </div>
 
-        {/* Section templates */}
+        {/* Section templates — grouped */}
         <div style={{ flex: 1, overflow: 'auto', padding: '8px' }}>
-          <h3
-            style={{
-              margin: '4px 4px 8px',
-              fontSize: '11px',
-              fontWeight: 700,
-              color: 'var(--text-muted)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.8px',
-            }}
-          >
-            Add Section
-          </h3>
+          {TEMPLATE_GROUPS.map((group) => (
+            <div key={group.label} style={{ marginBottom: '8px' }}>
+              <h3
+                style={{
+                  margin: '4px 4px 6px',
+                  fontSize: '10px',
+                  fontWeight: 700,
+                  color: 'var(--text-muted)',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.8px',
+                }}
+              >
+                {group.label}
+              </h3>
 
-          {SECTION_TEMPLATES.map((template) => (
-            <button
-              key={template.type}
-              onClick={() => addSection(template)}
-              style={{
-                width: '100%',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '7px 8px',
-                marginBottom: '2px',
-                background: 'transparent',
-                border: 'none',
-                borderRadius: '5px',
-                cursor: 'pointer',
-                textAlign: 'left',
-                color: 'var(--text-secondary)',
-                transition: 'background 0.1s',
-              }}
-              onMouseOver={(e) => (e.currentTarget.style.background = 'var(--bg-mid)')}
-              onMouseOut={(e) => (e.currentTarget.style.background = 'transparent')}
-            >
-              <span style={{ width: '20px', textAlign: 'center', fontSize: '12px', flexShrink: 0 }}>
-                {template.icon}
-              </span>
-              <div>
-                <div style={{ fontSize: '11px', fontWeight: 600 }}>{template.label}</div>
-                <div style={{ fontSize: '9px', color: 'var(--text-muted)', lineHeight: 1.3 }}>
-                  {template.description}
-                </div>
-              </div>
-            </button>
+              {group.templates.map((template) => (
+                <button
+                  key={template.type}
+                  onClick={() => addSection(template)}
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '7px 8px',
+                    marginBottom: '2px',
+                    background: 'transparent',
+                    border: 'none',
+                    borderRadius: '5px',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    color: 'var(--text-secondary)',
+                    transition: 'background 0.1s',
+                  }}
+                  onMouseOver={(e) => (e.currentTarget.style.background = 'var(--bg-mid)')}
+                  onMouseOut={(e) => (e.currentTarget.style.background = 'transparent')}
+                >
+                  <span style={{ width: '20px', textAlign: 'center', fontSize: '12px', flexShrink: 0 }}>
+                    {template.icon}
+                  </span>
+                  <div>
+                    <div style={{ fontSize: '11px', fontWeight: 600 }}>{template.label}</div>
+                    <div style={{ fontSize: '9px', color: 'var(--text-muted)', lineHeight: 1.3 }}>
+                      {template.description}
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
           ))}
         </div>
 
@@ -1195,6 +1214,54 @@ function SectionProperties({
         </>
       )}
 
+      {section.data.type === 'visualization' && (
+        <>
+          <ArtifactPicker
+            value={section.data.artifactId}
+            onChange={(id) => updateData({ artifactId: id })}
+            onUrlResolved={(url) => updateData({ artifactUrl: url })}
+            filterCategories={['chart', 'graphic', 'cta'] as ArtifactCategory[]}
+            label="Artifact"
+          />
+          <label style={labelStyle}>Title</label>
+          <input
+            value={section.data.title || ''}
+            onChange={(e) => updateData({ title: e.target.value })}
+            style={inputStyle}
+            placeholder="Optional title above visualization"
+          />
+          <label style={labelStyle}>Caption</label>
+          <input
+            value={section.data.caption || ''}
+            onChange={(e) => updateData({ caption: e.target.value })}
+            style={inputStyle}
+            placeholder="Optional caption below"
+          />
+          <label style={labelStyle}>Footnote</label>
+          <input
+            value={section.data.footnote || ''}
+            onChange={(e) => updateData({ footnote: e.target.value })}
+            style={inputStyle}
+            placeholder='e.g., "p<0.001 vs placebo"'
+          />
+          <label style={labelStyle}>Alt Text</label>
+          <input
+            value={section.data.alt}
+            onChange={(e) => updateData({ alt: e.target.value })}
+            style={inputStyle}
+          />
+          <label style={labelStyle}>Fit</label>
+          <select
+            value={section.data.fit || 'contain'}
+            onChange={(e) => updateData({ fit: e.target.value as 'contain' | 'cover' })}
+            style={selectStyle}
+          >
+            <option value="contain">Contain (show all)</option>
+            <option value="cover">Cover (fill area)</option>
+          </select>
+        </>
+      )}
+
       {section.data.type === 'bar_chart' && (
         <>
           <label style={labelStyle}>Title</label>
@@ -1203,18 +1270,29 @@ function SectionProperties({
             onChange={(e) => updateData({ title: e.target.value })}
             style={inputStyle}
           />
-          <label style={labelStyle}>Orientation</label>
-          <select
-            value={section.data.orientation}
-            onChange={(e) => updateData({ orientation: e.target.value as 'vertical' | 'horizontal' })}
-            style={selectStyle}
-          >
-            <option value="vertical">Vertical</option>
-            <option value="horizontal">Horizontal</option>
-          </select>
-          <p style={{ fontSize: '10px', color: 'var(--text-muted)', margin: '8px 0 0' }}>
-            Tip: Use an artifact image for production-quality charts
-          </p>
+          <ArtifactPicker
+            value={section.data.artifactId}
+            onChange={(id) => updateData({ artifactId: id })}
+            onUrlResolved={(url) => updateData({ artifactUrl: url })}
+            filterCategories={['chart'] as ArtifactCategory[]}
+            label="Use Artifact Image Instead"
+          />
+          {!section.data.artifactId && (
+            <>
+              <label style={labelStyle}>Orientation</label>
+              <select
+                value={section.data.orientation}
+                onChange={(e) => updateData({ orientation: e.target.value as 'vertical' | 'horizontal' })}
+                style={selectStyle}
+              >
+                <option value="vertical">Vertical</option>
+                <option value="horizontal">Horizontal</option>
+              </select>
+              <p style={{ fontSize: '10px', color: 'var(--text-muted)', margin: '8px 0 0' }}>
+                Using CSS-rendered chart. Pick an artifact above for production-quality charts.
+              </p>
+            </>
+          )}
         </>
       )}
 
@@ -1226,9 +1304,18 @@ function SectionProperties({
             onChange={(e) => updateData({ title: e.target.value })}
             style={inputStyle}
           />
-          <p style={{ fontSize: '10px', color: 'var(--text-muted)', margin: '8px 0 0' }}>
-            Line data is configured via JSON in the config panel
-          </p>
+          <ArtifactPicker
+            value={section.data.artifactId}
+            onChange={(id) => updateData({ artifactId: id })}
+            onUrlResolved={(url) => updateData({ artifactUrl: url })}
+            filterCategories={['chart'] as ArtifactCategory[]}
+            label="Use Artifact Image Instead"
+          />
+          {!section.data.artifactId && (
+            <p style={{ fontSize: '10px', color: 'var(--text-muted)', margin: '8px 0 0' }}>
+              Line charts render as placeholder. Pick an artifact above for the real chart image.
+            </p>
+          )}
         </>
       )}
 
@@ -1240,16 +1327,26 @@ function SectionProperties({
             onChange={(e) => updateData({ title: e.target.value })}
             style={inputStyle}
           />
-          <p style={{ fontSize: '10px', color: 'var(--text-muted)', margin: '8px 0 0' }}>
-            Table data is configured via JSON in the config panel
-          </p>
+          <ArtifactPicker
+            value={section.data.artifactId}
+            onChange={(id) => updateData({ artifactId: id })}
+            onUrlResolved={(url) => updateData({ artifactUrl: url })}
+            filterCategories={['chart', 'graphic'] as ArtifactCategory[]}
+            label="Use Artifact Image Instead"
+          />
+          {!section.data.artifactId && (
+            <p style={{ fontSize: '10px', color: 'var(--text-muted)', margin: '8px 0 0' }}>
+              Using CSS-rendered table. Pick an artifact above for pre-approved table images.
+            </p>
+          )}
         </>
       )}
 
       {section.data.type === 'stat_callout' && (
         <p style={{ fontSize: '10px', color: 'var(--text-muted)', margin: '4px 0 0' }}>
           Stats: {section.data.stats.map((s) => `${s.value} ${s.label}`).join(', ')}
-          <br />Edit via config panel for detailed control
+          <br />Edit via config panel for detailed control.
+          <br /><br />Tip: For production-quality stat graphics, use a Visualization section with an artifact image instead.
         </p>
       )}
 
@@ -1271,6 +1368,18 @@ function SectionProperties({
             <option value="banner">Banner</option>
             <option value="callout">Callout Box</option>
           </select>
+          <ArtifactPicker
+            value={section.data.artifactId}
+            onChange={(id) => updateData({ artifactId: id })}
+            onUrlResolved={(url) => updateData({ artifactUrl: url })}
+            filterCategories={['cta', 'graphic'] as ArtifactCategory[]}
+            label="Use CTA Artifact Image"
+          />
+          {section.data.artifactId && (
+            <p style={{ fontSize: '10px', color: 'var(--accent)', margin: '6px 0 0' }}>
+              Artifact image will replace the CSS-rendered CTA
+            </p>
+          )}
         </>
       )}
 
@@ -1328,6 +1437,13 @@ function SectionProperties({
 
       {section.data.type === 'image_block' && (
         <>
+          <ArtifactPicker
+            value={section.data.artifactId}
+            onChange={(id) => updateData({ artifactId: id })}
+            onUrlResolved={(url) => updateData({ artifactUrl: url })}
+            filterCategories={['photography', 'graphic', 'background'] as ArtifactCategory[]}
+            label="Image Source"
+          />
           <label style={labelStyle}>Alt Text</label>
           <input
             value={section.data.alt}
@@ -1341,9 +1457,6 @@ function SectionProperties({
             style={inputStyle}
             placeholder="Optional"
           />
-          <p style={{ fontSize: '10px', color: 'var(--text-muted)', margin: '8px 0 0' }}>
-            Link an artifact from the Artifacts library for the image source
-          </p>
         </>
       )}
 
@@ -1388,9 +1501,18 @@ function SectionProperties({
             style={inputStyle}
             placeholder="Optional title"
           />
-          <p style={{ fontSize: '10px', color: 'var(--text-muted)', margin: '8px 0 0' }}>
-            {section.data.charts.length} chart(s) — edit data via config panel
-          </p>
+          <ArtifactPicker
+            value={section.data.artifactId}
+            onChange={(id) => updateData({ artifactId: id })}
+            onUrlResolved={(url) => updateData({ artifactUrl: url })}
+            filterCategories={['chart'] as ArtifactCategory[]}
+            label="Use Artifact Image Instead"
+          />
+          {!section.data.artifactId && (
+            <p style={{ fontSize: '10px', color: 'var(--text-muted)', margin: '8px 0 0' }}>
+              {section.data.charts.length} chart(s) — CSS-rendered. Pick an artifact for production quality.
+            </p>
+          )}
         </>
       )}
     </div>

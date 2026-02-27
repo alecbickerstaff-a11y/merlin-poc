@@ -12,6 +12,7 @@ import type {
   FlashcardSection,
   SystemGraphicPreset,
   BrandSettings,
+  Artifact,
 } from './types';
 
 // ---------------------------------------------------------------------------
@@ -416,6 +417,46 @@ function buildCSS(config: FlashcardConfig, dims: PageDims): string {
       color: #666;
     }
 
+    /* Visualization block */
+    .fc-visualization {
+      text-align: center;
+    }
+
+    .fc-visualization .viz-title {
+      font-family: '${headlineFont}', sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      color: ${primary};
+      margin-bottom: 8px;
+      text-align: left;
+    }
+
+    .fc-visualization img {
+      max-width: 100%;
+      object-fit: contain;
+      border-radius: 4px;
+    }
+
+    .fc-visualization img.fit-cover {
+      width: 100%;
+      object-fit: cover;
+    }
+
+    .fc-visualization .viz-caption {
+      font-size: 9px;
+      color: #888;
+      margin-top: 6px;
+      font-style: italic;
+      text-align: left;
+    }
+
+    .fc-visualization .viz-footnote {
+      font-size: 8px;
+      color: #999;
+      margin-top: 4px;
+      text-align: left;
+    }
+
     /* Image block */
     .fc-image-block {
       text-align: center;
@@ -690,6 +731,21 @@ function buildSection(section: FlashcardSection, config: FlashcardConfig): strin
       }
       break;
 
+    case 'visualization':
+      inner = `
+        <div class="fc-visualization">
+          ${data.title ? `<div class="viz-title">${escapeHTML(data.title)}</div>` : ''}
+          ${
+            data.artifactUrl
+              ? `<img src="${escapeHTML(data.artifactUrl)}" alt="${escapeHTML(data.alt)}" class="${data.fit === 'cover' ? 'fit-cover' : ''}" />`
+              : '<div class="fc-image-placeholder">No visualization selected — pick an artifact</div>'
+          }
+          ${data.caption ? `<div class="viz-caption">${escapeHTML(data.caption)}</div>` : ''}
+          ${data.footnote ? `<div class="viz-footnote">${escapeHTML(data.footnote)}</div>` : ''}
+        </div>
+      `;
+      break;
+
     case 'stat_callout':
       inner = `
         <div class="fc-stat-callout">
@@ -709,8 +765,10 @@ function buildSection(section: FlashcardSection, config: FlashcardConfig): strin
       break;
 
     case 'bar_chart':
-      if (data.artifactId) {
-        inner = `<div class="fc-bar-chart"><div class="fc-chart-title">${escapeHTML(data.title)}</div><div class="fc-image-placeholder">Chart artifact</div></div>`;
+      if (data.artifactUrl) {
+        inner = `<div class="fc-bar-chart"><div class="fc-chart-title">${escapeHTML(data.title)}</div><img src="${escapeHTML(data.artifactUrl)}" alt="${escapeHTML(data.title)}" style="max-width:100%;border-radius:4px;" /></div>`;
+      } else if (data.artifactId) {
+        inner = `<div class="fc-bar-chart"><div class="fc-chart-title">${escapeHTML(data.title)}</div><div class="fc-image-placeholder">Chart artifact (loading...)</div></div>`;
       } else {
         const maxVal = Math.max(...data.groups.flatMap((g) => g.bars.map((b) => b.value)), 1);
         inner = `
@@ -747,7 +805,9 @@ function buildSection(section: FlashcardSection, config: FlashcardConfig): strin
       inner = `
         <div class="fc-line-chart">
           <div class="fc-chart-title">${escapeHTML(data.title)}</div>
-          ${data.artifactId ? '<div class="fc-image-placeholder">Chart artifact</div>' : '<div class="fc-image-placeholder">Line chart (use artifact for production)</div>'}
+          ${data.artifactUrl
+            ? `<img src="${escapeHTML(data.artifactUrl)}" alt="${escapeHTML(data.title)}" style="max-width:100%;border-radius:4px;" />`
+            : '<div class="fc-image-placeholder">Line chart — pick an artifact for production</div>'}
         </div>
       `;
       break;
@@ -757,8 +817,8 @@ function buildSection(section: FlashcardSection, config: FlashcardConfig): strin
         <div class="fc-donut-chart">
           ${data.title ? `<div class="fc-chart-title">${escapeHTML(data.title)}</div>` : ''}
           ${
-            data.artifactId
-              ? '<div class="fc-image-placeholder">Donut chart artifact</div>'
+            data.artifactUrl
+              ? `<img src="${escapeHTML(data.artifactUrl)}" alt="${escapeHTML(data.title || 'Donut chart')}" style="max-width:100%;border-radius:4px;" />`
               : `<div class="fc-donut-row">
               ${data.charts
                 .map((c) => {
@@ -781,8 +841,10 @@ function buildSection(section: FlashcardSection, config: FlashcardConfig): strin
       break;
 
     case 'data_table':
-      if (data.artifactId) {
-        inner = `<div><div class="fc-chart-title">${escapeHTML(data.title)}</div><div class="fc-image-placeholder">Table artifact</div></div>`;
+      if (data.artifactUrl) {
+        inner = `<div><div class="fc-chart-title">${escapeHTML(data.title)}</div><img src="${escapeHTML(data.artifactUrl)}" alt="${escapeHTML(data.title)}" style="max-width:100%;border-radius:4px;" /></div>`;
+      } else if (data.artifactId) {
+        inner = `<div><div class="fc-chart-title">${escapeHTML(data.title)}</div><div class="fc-image-placeholder">Table artifact (loading...)</div></div>`;
       } else {
         inner = `
           <div>
@@ -862,23 +924,31 @@ function buildSection(section: FlashcardSection, config: FlashcardConfig): strin
     case 'image_block':
       inner = `
         <div class="fc-image-block">
-          ${data.artifactId ? '<div class="fc-image-placeholder">Image (linked artifact)</div>' : '<div class="fc-image-placeholder">No image selected</div>'}
+          ${
+            data.artifactUrl
+              ? `<img src="${escapeHTML(data.artifactUrl)}" alt="${escapeHTML(data.alt)}" />`
+              : '<div class="fc-image-placeholder">No image selected — pick an artifact</div>'
+          }
           ${data.caption ? `<div class="caption">${escapeHTML(data.caption)}</div>` : ''}
         </div>
       `;
       break;
 
     case 'cta_block':
-      switch (data.style) {
-        case 'button':
-          inner = `<div><span class="fc-cta-button">${escapeHTML(data.text)}</span></div>`;
-          break;
-        case 'banner':
-          inner = `<div class="fc-cta-banner">${escapeHTML(data.text)}</div>`;
-          break;
-        case 'callout':
-          inner = `<div class="fc-cta-callout">${escapeHTML(data.text)}</div>`;
-          break;
+      if (data.artifactUrl) {
+        inner = `<div class="fc-image-block"><img src="${escapeHTML(data.artifactUrl)}" alt="${escapeHTML(data.text)}" style="max-width:100%;border-radius:4px;" /></div>`;
+      } else {
+        switch (data.style) {
+          case 'button':
+            inner = `<div><span class="fc-cta-button">${escapeHTML(data.text)}</span></div>`;
+            break;
+          case 'banner':
+            inner = `<div class="fc-cta-banner">${escapeHTML(data.text)}</div>`;
+            break;
+          case 'callout':
+            inner = `<div class="fc-cta-callout">${escapeHTML(data.text)}</div>`;
+            break;
+        }
       }
       break;
 
