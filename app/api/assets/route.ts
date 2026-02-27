@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isDbConfigured, listAssets, createAsset } from '../../../lib/db';
 import { generateMetadata } from '../../../lib/metadata-utils';
-import type { CampaignConfig, AssetMetadata, ContentType } from '../../../lib/types';
+import type { CampaignConfig, AssetMetadata, ContentType, FlashcardConfig } from '../../../lib/types';
 
 // ── GET /api/assets — list assets with optional filters ─────────────────────
 
@@ -33,6 +33,7 @@ export async function GET(req: NextRequest) {
 }
 
 // ── POST /api/assets — create a new asset ───────────────────────────────────
+// Supports both banner ads (config + html) and leave-behinds (flashcardConfig + html).
 
 export async function POST(req: NextRequest) {
   if (!isDbConfigured()) {
@@ -46,7 +47,9 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const {
       name,
+      contentType,
       config,
+      flashcardConfig,
       html,
       thumbnailUrl,
       metadata: providedMetadata,
@@ -55,7 +58,9 @@ export async function POST(req: NextRequest) {
       generationSource,
     } = body as {
       name?: string;
+      contentType?: ContentType;
       config: CampaignConfig;
+      flashcardConfig?: FlashcardConfig;
       html: string;
       thumbnailUrl?: string;
       metadata?: Partial<AssetMetadata>;
@@ -71,28 +76,54 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Auto-generate metadata, merge with any provided overrides
-    const autoMetadata = await generateMetadata(config, {
-      visualTone,
-      keyMessage,
-      generationSource,
-    });
+    // For leave-behinds with full metadata provided, skip auto-generation
+    let metadata: AssetMetadata;
 
-    const metadata: AssetMetadata = {
-      ...autoMetadata,
-      ...providedMetadata,
-      // Merge arrays rather than replace
-      tags: [...(autoMetadata.tags || []), ...(providedMetadata?.tags || [])],
-      claimsUsed: providedMetadata?.claimsUsed || autoMetadata.claimsUsed,
-      imageryDescriptors: providedMetadata?.imageryDescriptors || autoMetadata.imageryDescriptors,
-    };
+    if (contentType === 'leave_behind' && providedMetadata && providedMetadata.messagingType) {
+      // Leave-behind path — use provided metadata directly
+      metadata = {
+        claimsUsed: providedMetadata.claimsUsed || [],
+        imageryDescriptors: providedMetadata.imageryDescriptors || [],
+        messagingType: providedMetadata.messagingType,
+        visualTone: providedMetadata.visualTone || 'Professional',
+        isiVersionHash: providedMetadata.isiVersionHash || '',
+        generationSource: providedMetadata.generationSource || 'manual',
+        tags: providedMetadata.tags || [],
+      };
+    } else {
+      // Banner path — auto-generate metadata, merge with overrides
+      const autoMetadata = await generateMetadata(config, {
+        visualTone,
+        keyMessage,
+        generationSource,
+      });
 
-    const sizeLabel = config.size.preset || `${config.size.width}x${config.size.height}`;
-    const assetName = name || `${config.brand.name} — ${sizeLabel}`;
+      metadata = {
+        ...autoMetadata,
+        ...providedMetadata,
+        tags: [...(autoMetadata.tags || []), ...(providedMetadata?.tags || [])],
+        claimsUsed: providedMetadata?.claimsUsed || autoMetadata.claimsUsed,
+        imageryDescriptors: providedMetadata?.imageryDescriptors || autoMetadata.imageryDescriptors,
+      };
+    }
+
+    const resolvedContentType = contentType || 'banner';
+
+    let assetName = name;
+    if (!assetName) {
+      if (resolvedContentType === 'leave_behind') {
+        assetName = `${config.brand.name} — Leave Behind`;
+      } else {
+        const sizeLabel = config.size.preset || `${config.size.width}x${config.size.height}`;
+        assetName = `${config.brand.name} — ${sizeLabel}`;
+      }
+    }
 
     const asset = await createAsset({
       name: assetName,
+      contentType: resolvedContentType,
       config,
+      flashcardConfig,
       html,
       thumbnailUrl,
       metadata,
