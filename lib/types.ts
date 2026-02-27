@@ -206,6 +206,303 @@ export interface BrandData {
 }
 
 // =============================================================================
+// v1.3 — Content Types, Artifacts & Flashcard Config
+// =============================================================================
+
+// ---------------------------------------------------------------------------
+// ContentType — the type of deliverable being created
+// ---------------------------------------------------------------------------
+
+export type ContentType = 'banner' | 'leave_behind';
+
+// ---------------------------------------------------------------------------
+// Artifact — an approved brand asset (icon, CTA, chart image, graphic)
+// Uploaded by users and stored in the database for reuse across content.
+// ---------------------------------------------------------------------------
+
+export type ArtifactCategory = 'chart' | 'icon' | 'cta' | 'graphic' | 'logo' | 'background' | 'photography';
+
+export interface Artifact {
+  id: string;
+  name: string;
+  category: ArtifactCategory;
+  /** URL to the uploaded file (PNG, SVG, etc.) */
+  fileUrl: string;
+  /** MIME type of the file */
+  mimeType: string;
+  /** File size in bytes */
+  fileSize: number;
+  /** Original filename */
+  originalFilename: string;
+  /** Brand this artifact belongs to (null = shared across brands) */
+  brandId: string | null;
+  /** Optional descriptive tags */
+  tags: string[];
+  /** Extra metadata (e.g., CTA copy text, chart data source, icon label) */
+  meta: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ---------------------------------------------------------------------------
+// FlashcardConfig — the top-level object for a leave-behind / flashcard
+// ---------------------------------------------------------------------------
+
+export type PageSize = 'letter-landscape' | 'letter-portrait' | 'a4-landscape' | 'a4-portrait' | 'custom';
+
+export type SystemGraphicPreset =
+  | 'none'
+  | 'graphic-dominant'
+  | 'balanced'
+  | 'content-dominant'
+  | 'left-accent'
+  | 'right-accent';
+
+export interface FlashcardConfig {
+  /** Document page size */
+  pageSize: PageSize;
+  /** Custom dimensions (only used when pageSize === 'custom') */
+  customSize?: { width: number; height: number; unit: 'px' | 'in' | 'mm' };
+  /** Brand identity */
+  brand: BrandSettings;
+  /** System graphic arrangement for background */
+  systemGraphic: SystemGraphicPreset;
+  /** Ordered list of pages */
+  pages: FlashcardPage[];
+  /** ISI configuration */
+  isi: ISIConfig;
+  /** Footnotes / references */
+  references: string[];
+}
+
+export interface FlashcardPage {
+  id: string;
+  /** Page label (e.g., "Front", "Inside Left", "Back") */
+  label: string;
+  /** Ordered list of sections on this page */
+  sections: FlashcardSection[];
+}
+
+// ---------------------------------------------------------------------------
+// FlashcardSection — a content block placed on a page
+// ---------------------------------------------------------------------------
+
+export type SectionType =
+  | 'hero'
+  | 'headline'
+  | 'body_text'
+  | 'stat_callout'
+  | 'icon_row'
+  | 'icon_flow'
+  | 'bar_chart'
+  | 'line_chart'
+  | 'donut_chart'
+  | 'data_table'
+  | 'dosing_timeline'
+  | 'image_block'
+  | 'cta_block'
+  | 'isi_block'
+  | 'references'
+  | 'footer'
+  | 'divider';
+
+export interface FlashcardSection {
+  id: string;
+  type: SectionType;
+  /** Grid column span (out of 12) */
+  colSpan: number;
+  /** Grid column start (1-12) */
+  colStart: number;
+  /** Section-specific data (varies by type) */
+  data: SectionData;
+}
+
+// ---------------------------------------------------------------------------
+// SectionData — type-specific data for each section type
+// ---------------------------------------------------------------------------
+
+export type SectionData =
+  | HeroSectionData
+  | HeadlineSectionData
+  | BodyTextSectionData
+  | StatCalloutSectionData
+  | IconRowSectionData
+  | IconFlowSectionData
+  | BarChartSectionData
+  | LineChartSectionData
+  | DonutChartSectionData
+  | DataTableSectionData
+  | DosingTimelineSectionData
+  | ImageBlockSectionData
+  | CTABlockSectionData
+  | ISIBlockSectionData
+  | ReferencesSectionData
+  | FooterSectionData
+  | DividerSectionData;
+
+export interface HeroSectionData {
+  type: 'hero';
+  eyebrow?: string;
+  headline: string;
+  subheadline?: string;
+  badgeText?: string;
+  backgroundArtifactId?: string;
+  photographyArtifactId?: string;
+}
+
+export interface HeadlineSectionData {
+  type: 'headline';
+  eyebrow?: string;
+  text: string;
+  level: 'h1' | 'h2' | 'h3';
+}
+
+export interface BodyTextSectionData {
+  type: 'body_text';
+  text: string;
+  bullets?: boolean;
+}
+
+export interface StatCalloutSectionData {
+  type: 'stat_callout';
+  stats: Array<{
+    value: string;
+    label: string;
+    sublabel?: string;
+    style: 'circle' | 'large-number' | 'fraction';
+  }>;
+}
+
+export interface IconRowSectionData {
+  type: 'icon_row';
+  icons: Array<{
+    artifactId?: string;
+    label: string;
+    sublabel?: string;
+  }>;
+}
+
+export interface IconFlowSectionData {
+  type: 'icon_flow';
+  steps: Array<{
+    artifactId?: string;
+    title: string;
+    description?: string;
+  }>;
+  /** Show connecting arrows between steps */
+  showConnectors: boolean;
+}
+
+export interface BarChartSectionData {
+  type: 'bar_chart';
+  title: string;
+  orientation: 'vertical' | 'horizontal';
+  yAxisLabel?: string;
+  xAxisLabel?: string;
+  groups: Array<{
+    label: string;
+    bars: Array<{
+      label: string;
+      value: number;
+      isProduct: boolean;
+    }>;
+  }>;
+  /** Use an uploaded PNG instead of rendering */
+  artifactId?: string;
+}
+
+export interface LineChartSectionData {
+  type: 'line_chart';
+  title: string;
+  yAxisLabel?: string;
+  xAxisLabel?: string;
+  lines: Array<{
+    label: string;
+    isProduct: boolean;
+    dataPoints: Array<{ x: string; y: number }>;
+  }>;
+  /** Use an uploaded PNG instead of rendering */
+  artifactId?: string;
+}
+
+export interface DonutChartSectionData {
+  type: 'donut_chart';
+  title?: string;
+  charts: Array<{
+    label: string;
+    value: number;
+    total: number;
+    isProduct: boolean;
+  }>;
+  /** Use an uploaded PNG instead of rendering */
+  artifactId?: string;
+}
+
+export interface DataTableSectionData {
+  type: 'data_table';
+  title: string;
+  headers: string[];
+  rows: Array<{
+    cells: string[];
+    isProduct?: boolean;
+    isHighlighted?: boolean;
+  }>;
+  /** Use an uploaded PNG instead of rendering */
+  artifactId?: string;
+}
+
+export interface DosingTimelineSectionData {
+  type: 'dosing_timeline';
+  title: string;
+  phases: Array<{
+    label: string;
+    duration: string;
+    frequency: string;
+    iconArtifactId?: string;
+  }>;
+}
+
+export interface ImageBlockSectionData {
+  type: 'image_block';
+  artifactId?: string;
+  caption?: string;
+  alt: string;
+}
+
+export interface CTABlockSectionData {
+  type: 'cta_block';
+  text: string;
+  style: 'button' | 'banner' | 'callout';
+  url?: string;
+  artifactId?: string;
+}
+
+export interface ISIBlockSectionData {
+  type: 'isi_block';
+  variant: 'full' | 'selected';
+  text?: string;
+}
+
+export interface ReferencesSectionData {
+  type: 'references';
+  items: string[];
+}
+
+export interface FooterSectionData {
+  type: 'footer';
+  logoArtifactId?: string;
+  corporateLogoArtifactId?: string;
+  jobCode?: string;
+  date?: string;
+  legalLine?: string;
+}
+
+export interface DividerSectionData {
+  type: 'divider';
+  style: 'line' | 'space' | 'accent';
+}
+
+// =============================================================================
 // Workspace & Asset Management Types
 // =============================================================================
 
@@ -213,7 +510,7 @@ export interface BrandData {
 // WorkspaceView — the top-level navigation tabs
 // ---------------------------------------------------------------------------
 
-export type WorkspaceView = 'editor' | 'assets' | 'tracker';
+export type WorkspaceView = 'editor' | 'assets' | 'tracker' | 'artifacts';
 
 // ---------------------------------------------------------------------------
 // Asset — a saved banner with metadata, stored in the database
@@ -239,7 +536,12 @@ export interface AssetMetadata {
 export interface Asset {
   id: string;
   name: string;
+  /** Content type: banner or leave_behind */
+  contentType: ContentType;
+  /** Banner config (when contentType === 'banner') */
   config: CampaignConfig;
+  /** Flashcard config (when contentType === 'leave_behind') */
+  flashcardConfig?: FlashcardConfig;
   html: string;
   thumbnailUrl?: string;
   metadata: AssetMetadata;
@@ -276,8 +578,14 @@ export interface WorkspaceState {
   /** Which top-level view is active */
   activeView: WorkspaceView;
 
-  /** Current config being edited */
+  /** Which content type is being created */
+  activeContentType: ContentType;
+
+  /** Current banner config being edited */
   editorConfig: CampaignConfig;
+
+  /** Current flashcard config being edited */
+  flashcardConfig: FlashcardConfig;
 
   /** Active generation jobs (multi-size) */
   generationJobs: GenerationJob[];
@@ -287,6 +595,9 @@ export interface WorkspaceState {
 
   /** Saved assets loaded from the database */
   assets: Asset[];
+
+  /** Uploaded artifacts (icons, CTAs, charts, graphics) */
+  artifacts: Artifact[];
 
   /** Filters for the asset gallery */
   assetFilters: AssetFilters;

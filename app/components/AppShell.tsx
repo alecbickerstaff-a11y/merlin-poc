@@ -4,6 +4,7 @@ import { useWorkspace } from '../context/WorkspaceContext';
 import TopNavBar from './TopNavBar';
 import EditorView from './EditorView';
 import AssetsView from './AssetsView';
+import ArtifactsView from './ArtifactsView';
 
 // ── Tracker placeholder (Phase 5) ───────────────────────────────────────────
 
@@ -54,6 +55,7 @@ export default function AppShell() {
       <div style={{ flex: 1, overflow: 'hidden' }}>
         {state.activeView === 'editor' && <EditorView />}
         {state.activeView === 'assets' && <AssetsView />}
+        {state.activeView === 'artifacts' && <ArtifactsView />}
         {state.activeView === 'tracker' && <TrackerPlaceholder />}
       </div>
     </div>

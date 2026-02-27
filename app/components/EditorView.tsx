@@ -8,13 +8,22 @@ import PropertiesPanel from './PropertiesPanel';
 import PreviewPanel from './PreviewPanel';
 import ConfigPanel from './ConfigPanel';
 import MultiPreviewGrid from './MultiPreviewGrid';
+import FlashcardEditor from './FlashcardEditor';
 
 // ── EditorView ───────────────────────────────────────────────────────────────
 // Wraps the 3-panel editor layout. When multi-size generation has results,
 // shows a grid view toggle to see all generated banners.
+// When content type is 'leave_behind', shows the flashcard editor instead.
 
 export default function EditorView() {
   const { state, dispatch } = useWorkspace();
+
+  // ── Leave Behind mode → Flashcard editor ─────────────────────────────────
+  if (state.activeContentType === 'leave_behind') {
+    return <FlashcardEditor />;
+  }
+
+  // ── Banner mode → existing 3-panel layout ────────────────────────────────
   const config = state.editorConfig;
   const jobs = state.generationJobs;
   const hasMultiResults = jobs.length > 1;

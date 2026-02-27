@@ -4,7 +4,7 @@
 // =============================================================================
 
 import { Pool } from 'pg';
-import type { Asset, AssetMetadata, CampaignConfig } from './types';
+import type { Asset, AssetMetadata, Artifact, ArtifactCategory, CampaignConfig, ContentType, FlashcardConfig } from './types';
 
 // ── Connection pool (lazy init) ─────────────────────────────────────────────
 
@@ -40,7 +40,9 @@ export function isDbConfigured(): boolean {
 interface AssetRow {
   id: string;
   name: string;
+  content_type: ContentType;
   config: CampaignConfig;
+  flashcard_config: FlashcardConfig | null;
   html: string;
   thumbnail_url: string | null;
   metadata: AssetMetadata;
@@ -49,13 +51,50 @@ interface AssetRow {
 }
 
 function rowToAsset(row: AssetRow): Asset {
+  const fc = row.flashcard_config;
   return {
     id: row.id,
     name: row.name,
+    contentType: row.content_type || 'banner',
     config: typeof row.config === 'string' ? JSON.parse(row.config) : row.config,
+    flashcardConfig: fc ? (typeof fc === 'string' ? JSON.parse(fc) : fc) : undefined,
     html: row.html,
     thumbnailUrl: row.thumbnail_url || undefined,
     metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+// ── Row → Artifact mapper ───────────────────────────────────────────────────
+
+interface ArtifactRow {
+  id: string;
+  name: string;
+  category: ArtifactCategory;
+  file_url: string;
+  mime_type: string;
+  file_size: number;
+  original_filename: string;
+  brand_id: string | null;
+  tags: string[];
+  meta: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+function rowToArtifact(row: ArtifactRow): Artifact {
+  return {
+    id: row.id,
+    name: row.name,
+    category: row.category,
+    fileUrl: row.file_url,
+    mimeType: row.mime_type,
+    fileSize: row.file_size,
+    originalFilename: row.original_filename,
+    brandId: row.brand_id,
+    tags: typeof row.tags === 'string' ? JSON.parse(row.tags) : (row.tags || []),
+    meta: typeof row.meta === 'string' ? JSON.parse(row.meta) : (row.meta || {}),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -68,6 +107,7 @@ export interface ListAssetsOptions {
   size?: string;
   visualTone?: string;
   messagingType?: string;
+  contentType?: ContentType;
   limit?: number;
   offset?: number;
 }
@@ -109,6 +149,12 @@ export async function listAssets(opts: ListAssetsOptions = {}): Promise<{
     paramIndex++;
   }
 
+  if (opts.contentType) {
+    conditions.push(`content_type = $${paramIndex}`);
+    values.push(opts.contentType);
+    paramIndex++;
+  }
+
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
   const countResult = await db.query(
@@ -140,19 +186,23 @@ export async function getAsset(id: string): Promise<Asset | null> {
 
 export async function createAsset(data: {
   name: string;
+  contentType?: ContentType;
   config: CampaignConfig;
+  flashcardConfig?: FlashcardConfig;
   html: string;
   thumbnailUrl?: string;
   metadata: AssetMetadata;
 }): Promise<Asset> {
   const db = getPool();
   const result = await db.query(
-    `INSERT INTO assets (name, config, html, thumbnail_url, metadata)
-     VALUES ($1, $2::jsonb, $3, $4, $5::jsonb)
+    `INSERT INTO assets (name, content_type, config, flashcard_config, html, thumbnail_url, metadata)
+     VALUES ($1, $2, $3::jsonb, $4::jsonb, $5, $6, $7::jsonb)
      RETURNING *`,
     [
       data.name,
+      data.contentType || 'banner',
       JSON.stringify(data.config),
+      data.flashcardConfig ? JSON.stringify(data.flashcardConfig) : null,
       data.html,
       data.thumbnailUrl || null,
       JSON.stringify(data.metadata),
@@ -329,4 +379,177 @@ export async function getTrackerData(): Promise<{
       count: parseInt(r.count as string, 10),
     })),
   };
+}
+
+// =============================================================================
+// ARTIFACT CRUD
+// =============================================================================
+
+// ── List artifacts (with optional filters) ───────────────────────────────────
+
+export interface ListArtifactsOptions {
+  category?: ArtifactCategory;
+  brandId?: string;
+  search?: string;
+  tags?: string[];
+  limit?: number;
+  offset?: number;
+}
+
+export async function listArtifacts(opts: ListArtifactsOptions = {}): Promise<{
+  artifacts: Artifact[];
+  total: number;
+}> {
+  const db = getPool();
+  const limit = opts.limit || 50;
+  const offset = opts.offset || 0;
+
+  const conditions: string[] = [];
+  const values: unknown[] = [];
+  let paramIndex = 1;
+
+  if (opts.category) {
+    conditions.push(`category = $${paramIndex}`);
+    values.push(opts.category);
+    paramIndex++;
+  }
+
+  if (opts.brandId) {
+    conditions.push(`brand_id = $${paramIndex}`);
+    values.push(opts.brandId);
+    paramIndex++;
+  }
+
+  if (opts.search) {
+    conditions.push(`(name ILIKE $${paramIndex} OR original_filename ILIKE $${paramIndex})`);
+    values.push(`%${opts.search}%`);
+    paramIndex++;
+  }
+
+  if (opts.tags && opts.tags.length > 0) {
+    conditions.push(`tags @> $${paramIndex}::jsonb`);
+    values.push(JSON.stringify(opts.tags));
+    paramIndex++;
+  }
+
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+  const countResult = await db.query(
+    `SELECT COUNT(*) as total FROM artifacts ${whereClause}`,
+    values,
+  );
+
+  const dataResult = await db.query(
+    `SELECT * FROM artifacts ${whereClause} ORDER BY created_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
+    [...values, limit, offset],
+  );
+
+  return {
+    artifacts: dataResult.rows.map((row) => rowToArtifact(row as unknown as ArtifactRow)),
+    total: parseInt(countResult.rows[0].total, 10),
+  };
+}
+
+// ── Get single artifact ──────────────────────────────────────────────────────
+
+export async function getArtifact(id: string): Promise<Artifact | null> {
+  const db = getPool();
+  const result = await db.query('SELECT * FROM artifacts WHERE id = $1', [id]);
+  if (result.rows.length === 0) return null;
+  return rowToArtifact(result.rows[0] as unknown as ArtifactRow);
+}
+
+// ── Create artifact ──────────────────────────────────────────────────────────
+
+export async function createArtifact(data: {
+  name: string;
+  category: ArtifactCategory;
+  fileUrl: string;
+  mimeType: string;
+  fileSize: number;
+  originalFilename: string;
+  brandId?: string;
+  tags?: string[];
+  meta?: Record<string, unknown>;
+}): Promise<Artifact> {
+  const db = getPool();
+  const result = await db.query(
+    `INSERT INTO artifacts (name, category, file_url, mime_type, file_size, original_filename, brand_id, tags, meta)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb)
+     RETURNING *`,
+    [
+      data.name,
+      data.category,
+      data.fileUrl,
+      data.mimeType,
+      data.fileSize,
+      data.originalFilename,
+      data.brandId || null,
+      JSON.stringify(data.tags || []),
+      JSON.stringify(data.meta || {}),
+    ],
+  );
+  return rowToArtifact(result.rows[0] as unknown as ArtifactRow);
+}
+
+// ── Update artifact ──────────────────────────────────────────────────────────
+
+export async function updateArtifact(
+  id: string,
+  data: {
+    name?: string;
+    category?: ArtifactCategory;
+    tags?: string[];
+    meta?: Record<string, unknown>;
+    brandId?: string | null;
+  },
+): Promise<Artifact | null> {
+  const db = getPool();
+  const sets: string[] = ['updated_at = NOW()'];
+  const values: unknown[] = [];
+  let paramIndex = 1;
+
+  if (data.name !== undefined) {
+    sets.push(`name = $${paramIndex}`);
+    values.push(data.name);
+    paramIndex++;
+  }
+  if (data.category !== undefined) {
+    sets.push(`category = $${paramIndex}`);
+    values.push(data.category);
+    paramIndex++;
+  }
+  if (data.tags !== undefined) {
+    sets.push(`tags = $${paramIndex}::jsonb`);
+    values.push(JSON.stringify(data.tags));
+    paramIndex++;
+  }
+  if (data.meta !== undefined) {
+    sets.push(`meta = $${paramIndex}::jsonb`);
+    values.push(JSON.stringify(data.meta));
+    paramIndex++;
+  }
+  if (data.brandId !== undefined) {
+    sets.push(`brand_id = $${paramIndex}`);
+    values.push(data.brandId);
+    paramIndex++;
+  }
+
+  values.push(id);
+
+  const result = await db.query(
+    `UPDATE artifacts SET ${sets.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
+    values,
+  );
+
+  if (result.rows.length === 0) return null;
+  return rowToArtifact(result.rows[0] as unknown as ArtifactRow);
+}
+
+// ── Delete artifact ──────────────────────────────────────────────────────────
+
+export async function deleteArtifact(id: string): Promise<boolean> {
+  const db = getPool();
+  const result = await db.query('DELETE FROM artifacts WHERE id = $1', [id]);
+  return (result.rowCount ?? 0) > 0;
 }

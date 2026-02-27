@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isDbConfigured, listAssets, createAsset } from '../../../lib/db';
 import { generateMetadata } from '../../../lib/metadata-utils';
-import type { CampaignConfig, AssetMetadata } from '../../../lib/types';
+import type { CampaignConfig, AssetMetadata, ContentType } from '../../../lib/types';
 
 // ── GET /api/assets — list assets with optional filters ─────────────────────
 
@@ -20,6 +20,7 @@ export async function GET(req: NextRequest) {
       size: searchParams.get('size') || undefined,
       visualTone: searchParams.get('visualTone') || undefined,
       messagingType: searchParams.get('messagingType') || undefined,
+      contentType: (searchParams.get('contentType') as ContentType) || undefined,
       limit: searchParams.has('limit') ? parseInt(searchParams.get('limit')!, 10) : 50,
       offset: searchParams.has('offset') ? parseInt(searchParams.get('offset')!, 10) : 0,
     });
