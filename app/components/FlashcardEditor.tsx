@@ -368,32 +368,86 @@ function SectionCard({
         </span>
       </div>
 
-      {/* Preview of data */}
+      {/* Artifact thumbnail preview in compose */}
+      {(() => {
+        const d = section.data;
+        const url =
+          (d.type === 'visualization' && d.artifactUrl) ||
+          (d.type === 'image_block' && d.artifactUrl) ||
+          (d.type === 'bar_chart' && d.artifactUrl) ||
+          (d.type === 'line_chart' && d.artifactUrl) ||
+          (d.type === 'donut_chart' && d.artifactUrl) ||
+          (d.type === 'data_table' && d.artifactUrl) ||
+          (d.type === 'cta_block' && d.artifactUrl) ||
+          null;
+        if (url) {
+          return (
+            <div
+              style={{
+                margin: '4px 0 6px',
+                borderRadius: '4px',
+                overflow: 'hidden',
+                background: 'var(--bg-darkest)',
+                border: '1px solid var(--border)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                maxHeight: '120px',
+              }}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={url}
+                alt=""
+                style={{
+                  maxWidth: '100%',
+                  maxHeight: '120px',
+                  objectFit: 'contain',
+                  display: 'block',
+                }}
+              />
+            </div>
+          );
+        }
+        return null;
+      })()}
+
+      {/* Preview text */}
       <div style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
         {section.data.type === 'hero' && section.data.headline}
         {section.data.type === 'headline' && section.data.text}
         {section.data.type === 'body_text' && section.data.text.slice(0, 60) + (section.data.text.length > 60 ? '...' : '')}
         {section.data.type === 'visualization' && (
           <span>
-            {section.data.artifactId
+            {section.data.artifactUrl
               ? <span style={{ color: 'var(--accent)' }}>{section.data.title || 'Artifact linked'}</span>
               : <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>No artifact selected</span>}
           </span>
         )}
         {section.data.type === 'stat_callout' && `${section.data.stats.length} stat(s)`}
         {section.data.type === 'bar_chart' && (
-          <span>{section.data.artifactId ? <span style={{ color: 'var(--accent)' }}>{section.data.title}</span> : section.data.title}</span>
+          <span>{section.data.artifactUrl
+            ? <span style={{ color: 'var(--accent)' }}>{section.data.title}</span>
+            : section.data.title}</span>
         )}
         {section.data.type === 'line_chart' && section.data.title}
-        {section.data.type === 'donut_chart' && `${section.data.charts.length} chart(s)`}
+        {section.data.type === 'donut_chart' && (
+          <span>{section.data.artifactUrl
+            ? <span style={{ color: 'var(--accent)' }}>{section.data.title || 'Chart artifact'}</span>
+            : `${section.data.charts.length} chart(s)`}</span>
+        )}
         {section.data.type === 'data_table' && (
-          <span>{section.data.artifactId ? <span style={{ color: 'var(--accent)' }}>{section.data.title}</span> : section.data.title}</span>
+          <span>{section.data.artifactUrl
+            ? <span style={{ color: 'var(--accent)' }}>{section.data.title}</span>
+            : section.data.title}</span>
         )}
         {section.data.type === 'icon_row' && `${section.data.icons.length} icon(s)`}
         {section.data.type === 'icon_flow' && `${section.data.steps.length} step(s)`}
         {section.data.type === 'dosing_timeline' && section.data.title}
         {section.data.type === 'image_block' && (
-          <span>{section.data.artifactId ? <span style={{ color: 'var(--accent)' }}>Artifact linked</span> : section.data.alt}</span>
+          <span>{section.data.artifactUrl
+            ? <span style={{ color: 'var(--accent)' }}>Artifact linked</span>
+            : section.data.alt}</span>
         )}
         {section.data.type === 'cta_block' && section.data.text}
         {section.data.type === 'isi_block' && `ISI — ${section.data.variant}`}
