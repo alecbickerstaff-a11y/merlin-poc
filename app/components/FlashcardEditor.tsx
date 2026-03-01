@@ -8,6 +8,7 @@ import type {
   FlashcardConfig,
   FlashcardPage,
   FlashcardSection,
+  FlashcardTemplate,
   SectionType,
   SectionData,
   SystemGraphicPreset,
@@ -151,6 +152,32 @@ const TEMPLATE_GROUPS: TemplateGroup[] = [
           style: 'button' as const,
         }),
       },
+      {
+        type: 'checkmark_callout',
+        label: 'Checkmark Callout',
+        icon: '✓',
+        description: 'Benefit statements with checkmark icons',
+        defaultColSpan: 12,
+        createData: () => ({
+          type: 'checkmark_callout' as const,
+          items: [
+            { heading: 'Key benefit:', body: 'Description of benefit' },
+            { heading: 'Another benefit:', body: 'Description of second benefit' },
+          ],
+        }),
+      },
+      {
+        type: 'qr_cta',
+        label: 'QR CTA',
+        icon: '⊞',
+        description: 'Callout with QR code image',
+        defaultColSpan: 12,
+        createData: () => ({
+          type: 'qr_cta' as const,
+          text: 'Learn more about this treatment',
+          footnote: 'Data rates may apply.',
+        }),
+      },
     ],
   },
   {
@@ -260,6 +287,17 @@ const TEMPLATE_GROUPS: TemplateGroup[] = [
           jobCode: 'XX-XXXXX-XXXX',
           date: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
           legalLine: '© 2026 Brand Name. All rights reserved.',
+        }),
+      },
+      {
+        type: 'ruled_subheader',
+        label: 'Ruled Subheader',
+        icon: '═',
+        description: 'Centered text between horizontal rules',
+        defaultColSpan: 12,
+        createData: () => ({
+          type: 'ruled_subheader' as const,
+          text: 'Section title:',
         }),
       },
       {
@@ -379,6 +417,7 @@ function SectionCard({
           (d.type === 'donut_chart' && d.artifactUrl) ||
           (d.type === 'data_table' && d.artifactUrl) ||
           (d.type === 'cta_block' && d.artifactUrl) ||
+          (d.type === 'qr_cta' && d.qrArtifactUrl) ||
           null;
         if (url) {
           return (
@@ -454,6 +493,9 @@ function SectionCard({
         {section.data.type === 'references' && `${section.data.items.length} ref(s)`}
         {section.data.type === 'footer' && (section.data.jobCode || 'Footer')}
         {section.data.type === 'divider' && `${section.data.style} divider`}
+        {section.data.type === 'checkmark_callout' && `${section.data.items.length} callout(s)`}
+        {section.data.type === 'ruled_subheader' && section.data.text}
+        {section.data.type === 'qr_cta' && section.data.text.slice(0, 50)}
       </div>
 
       {/* Controls (show on selected) */}
@@ -727,6 +769,40 @@ export default function FlashcardEditor() {
           >
             Document
           </h3>
+
+          <label style={labelStyle}>Template</label>
+          <select
+            value={config.template || 'standard'}
+            onChange={(e) => {
+              const tmpl = e.target.value as FlashcardTemplate;
+              if (tmpl === 'announcement') {
+                updateConfig((prev) => ({
+                  ...prev,
+                  template: 'announcement',
+                  pageSize: 'letter-portrait',
+                  pages: [
+                    { id: 'fold-1', label: 'Fold 1', sections: [], foldRole: 'content' as const },
+                    { id: 'fold-2', label: 'Fold 2', sections: [], foldRole: 'content' as const },
+                    { id: 'fold-3', label: 'Fold 3 (Content + Footer)', sections: [], foldRole: 'content' as const },
+                    { id: 'fold-4', label: 'Fold 4 (ISI)', sections: [], foldRole: 'isi' as const },
+                    { id: 'fold-blank', label: 'Blank', sections: [], foldRole: 'blank' as const },
+                    { id: 'fold-glue', label: 'Glue', sections: [], foldRole: 'glue' as const },
+                  ],
+                }));
+                setActivePageIndex(0);
+                setSelectedSectionId(null);
+              } else {
+                updateConfig((prev) => ({
+                  ...prev,
+                  template: 'standard',
+                }));
+              }
+            }}
+            style={selectStyle}
+          >
+            <option value="standard">Standard</option>
+            <option value="announcement">Announcement (Tri-fold)</option>
+          </select>
 
           <label style={labelStyle}>Page Size</label>
           <select
@@ -1112,20 +1188,95 @@ export default function FlashcardEditor() {
             onColStartChange={(v) => updateSectionColStart(selectedSection.id, v)}
           />
         ) : (
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              height: '100%',
-              padding: '20px',
-              color: 'var(--text-muted)',
-              textAlign: 'center',
-              userSelect: 'none',
-            }}
-          >
-            <p style={{ fontSize: '12px', margin: 0 }}>
+          <div style={{ padding: '12px' }}>
+            <h3
+              style={{
+                margin: '0 0 10px',
+                fontSize: '11px',
+                fontWeight: 700,
+                color: 'var(--text-muted)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.8px',
+              }}
+            >
+              Page: {activePage.label}
+            </h3>
+
+            <label style={labelStyle}>Page Label</label>
+            <input
+              value={activePage.label}
+              onChange={(e) =>
+                updateActivePage((page) => ({ ...page, label: e.target.value }))
+              }
+              style={inputStyle}
+            />
+
+            <label style={labelStyle}>Background Image</label>
+            <ArtifactPicker
+              value={activePage.backgroundArtifactId}
+              onChange={(id) =>
+                updateActivePage((page) => ({ ...page, backgroundArtifactId: id }))
+              }
+              onUrlResolved={(url) =>
+                updateActivePage((page) => ({ ...page, backgroundArtifactUrl: url }))
+              }
+              filterCategories={['background', 'photography', 'graphic'] as ArtifactCategory[]}
+              label="Background Artifact"
+            />
+
+            {activePage.backgroundArtifactUrl && (
+              <>
+                <label style={labelStyle}>Position</label>
+                <select
+                  value={activePage.backgroundPosition || 'cover'}
+                  onChange={(e) =>
+                    updateActivePage((page) => ({
+                      ...page,
+                      backgroundPosition: e.target.value as 'cover' | 'bottom' | 'top' | 'center',
+                    }))
+                  }
+                  style={selectStyle}
+                >
+                  <option value="cover">Cover (fill)</option>
+                  <option value="bottom">Bottom</option>
+                  <option value="top">Top</option>
+                  <option value="center">Center</option>
+                </select>
+
+                <label style={labelStyle}>Overlay Tint</label>
+                <input
+                  value={activePage.backgroundOverlay || ''}
+                  onChange={(e) =>
+                    updateActivePage((page) => ({ ...page, backgroundOverlay: e.target.value }))
+                  }
+                  style={inputStyle}
+                  placeholder="e.g., rgba(255,255,255,0.85)"
+                />
+              </>
+            )}
+
+            {config.template === 'announcement' && (
+              <>
+                <label style={labelStyle}>Fold Role</label>
+                <select
+                  value={activePage.foldRole || 'content'}
+                  onChange={(e) =>
+                    updateActivePage((page) => ({
+                      ...page,
+                      foldRole: e.target.value as 'content' | 'isi' | 'blank' | 'glue',
+                    }))
+                  }
+                  style={selectStyle}
+                >
+                  <option value="content">Content</option>
+                  <option value="isi">ISI</option>
+                  <option value="blank">Blank</option>
+                  <option value="glue">Glue</option>
+                </select>
+              </>
+            )}
+
+            <p style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '16px' }}>
               Select a section to edit its properties
             </p>
           </div>
@@ -1471,6 +1622,27 @@ function SectionProperties({
             onChange={(e) => updateData({ legalLine: e.target.value })}
             style={inputStyle}
           />
+          <label style={labelStyle}>Copyright Line</label>
+          <input
+            value={section.data.copyrightLine || ''}
+            onChange={(e) => updateData({ copyrightLine: e.target.value })}
+            style={inputStyle}
+            placeholder="e.g., © 2026 Company. All rights reserved."
+          />
+          <label style={labelStyle}>Legal Lines (one per line)</label>
+          <textarea
+            value={(section.data.legalLines || []).join('\n')}
+            onChange={(e) => updateData({ legalLines: e.target.value.split('\n').filter(Boolean) })}
+            style={{ ...inputStyle, minHeight: '60px', resize: 'vertical' }}
+            placeholder="Wrap with ** for bold"
+          />
+          <ArtifactPicker
+            value={section.data.corporateLogoArtifactId}
+            onChange={(id) => updateData({ corporateLogoArtifactId: id })}
+            onUrlResolved={(url) => updateData({ corporateLogoArtifactUrl: url })}
+            filterCategories={['logo'] as ArtifactCategory[]}
+            label="Corporate Logo"
+          />
         </>
       )}
 
@@ -1567,6 +1739,80 @@ function SectionProperties({
               {section.data.charts.length} chart(s) — CSS-rendered. Pick an artifact for production quality.
             </p>
           )}
+        </>
+      )}
+
+      {section.data.type === 'checkmark_callout' && (() => {
+        const cmData = section.data;
+        return (
+          <>
+            {cmData.items.map((item, idx) => (
+              <div key={idx} style={{ borderBottom: '1px solid var(--border)', paddingBottom: '8px', marginBottom: '4px' }}>
+                <label style={labelStyle}>Item {idx + 1} — Heading</label>
+                <input
+                  value={item.heading}
+                  onChange={(e) => {
+                    const items = [...cmData.items];
+                    items[idx] = { ...items[idx], heading: e.target.value };
+                    updateData({ items });
+                  }}
+                  style={inputStyle}
+                />
+                <label style={labelStyle}>Body</label>
+                <textarea
+                  value={item.body}
+                  onChange={(e) => {
+                    const items = [...cmData.items];
+                    items[idx] = { ...items[idx], body: e.target.value };
+                    updateData({ items });
+                  }}
+                  style={{ ...inputStyle, minHeight: '50px', resize: 'vertical' }}
+                />
+              </div>
+            ))}
+            <button
+              onClick={() => updateData({ items: [...cmData.items, { heading: 'New benefit:', body: 'Description' }] })}
+              style={{ ...inputStyle, cursor: 'pointer', textAlign: 'center', fontWeight: 600, fontSize: '11px', marginTop: '4px' }}
+            >
+              + Add Item
+            </button>
+          </>
+        );
+      })()}
+
+      {section.data.type === 'ruled_subheader' && (
+        <>
+          <label style={labelStyle}>Subheader Text</label>
+          <input
+            value={section.data.text}
+            onChange={(e) => updateData({ text: e.target.value })}
+            style={inputStyle}
+          />
+        </>
+      )}
+
+      {section.data.type === 'qr_cta' && (
+        <>
+          <label style={labelStyle}>CTA Text</label>
+          <textarea
+            value={section.data.text}
+            onChange={(e) => updateData({ text: e.target.value })}
+            style={{ ...inputStyle, minHeight: '60px', resize: 'vertical' }}
+          />
+          <ArtifactPicker
+            value={section.data.qrArtifactId}
+            onChange={(id) => updateData({ qrArtifactId: id })}
+            onUrlResolved={(url) => updateData({ qrArtifactUrl: url })}
+            filterCategories={['graphic'] as ArtifactCategory[]}
+            label="QR Code Image"
+          />
+          <label style={labelStyle}>Footnote</label>
+          <input
+            value={section.data.footnote || ''}
+            onChange={(e) => updateData({ footnote: e.target.value })}
+            style={inputStyle}
+            placeholder="e.g., Data rates may apply."
+          />
         </>
       )}
     </div>

@@ -250,6 +250,13 @@ export interface Artifact {
 
 export type PageSize = 'letter-landscape' | 'letter-portrait' | 'a4-landscape' | 'a4-portrait' | 'custom';
 
+/**
+ * FlashcardTemplate — distinguishes layout presets.
+ *  - 'standard'      — the existing free-form page-based layout
+ *  - 'announcement'  — tri-fold HCP announcement flashcard (3 panels/side)
+ */
+export type FlashcardTemplate = 'standard' | 'announcement';
+
 export type SystemGraphicPreset =
   | 'none'
   | 'graphic-dominant'
@@ -259,6 +266,8 @@ export type SystemGraphicPreset =
   | 'right-accent';
 
 export interface FlashcardConfig {
+  /** Template layout preset */
+  template?: FlashcardTemplate;
   /** Document page size */
   pageSize: PageSize;
   /** Custom dimensions (only used when pageSize === 'custom') */
@@ -281,6 +290,16 @@ export interface FlashcardPage {
   label: string;
   /** Ordered list of sections on this page */
   sections: FlashcardSection[];
+  /** Background image artifact (full-bleed behind all content) */
+  backgroundArtifactId?: string;
+  /** Cached background artifact URL */
+  backgroundArtifactUrl?: string;
+  /** How the background image is positioned */
+  backgroundPosition?: 'cover' | 'bottom' | 'top' | 'center';
+  /** Background overlay tint (e.g., "rgba(255,255,255,0.85)") */
+  backgroundOverlay?: string;
+  /** Page role in a tri-fold layout */
+  foldRole?: 'content' | 'isi' | 'blank' | 'glue';
 }
 
 // ---------------------------------------------------------------------------
@@ -305,7 +324,10 @@ export type SectionType =
   | 'isi_block'
   | 'references'
   | 'footer'
-  | 'divider';
+  | 'divider'
+  | 'checkmark_callout'
+  | 'ruled_subheader'
+  | 'qr_cta';
 
 export interface FlashcardSection {
   id: string;
@@ -340,7 +362,10 @@ export type SectionData =
   | ISIBlockSectionData
   | ReferencesSectionData
   | FooterSectionData
-  | DividerSectionData;
+  | DividerSectionData
+  | CheckmarkCalloutSectionData
+  | RuledSubheaderSectionData
+  | QRCTASectionData;
 
 export interface HeroSectionData {
   type: 'hero';
@@ -528,15 +553,61 @@ export interface ReferencesSectionData {
 export interface FooterSectionData {
   type: 'footer';
   logoArtifactId?: string;
+  logoArtifactUrl?: string;
   corporateLogoArtifactId?: string;
+  corporateLogoArtifactUrl?: string;
+  /** Additional product logos (e.g., Rybrevant + Lazcluze combo) */
+  productLogos?: Array<{
+    artifactId?: string;
+    artifactUrl?: string;
+    alt: string;
+  }>;
   jobCode?: string;
   date?: string;
   legalLine?: string;
+  /** Extra legal lines (e.g., "Please see full ISI on pages 2-3") */
+  legalLines?: string[];
+  copyrightLine?: string;
 }
 
 export interface DividerSectionData {
   type: 'divider';
   style: 'line' | 'space' | 'accent';
+}
+
+/**
+ * Checkmark Callout — pairs of icon-checkmark + bold heading + body text.
+ * Used for key benefit statements (e.g., "Familiar tolerability: No new safety signals…").
+ */
+export interface CheckmarkCalloutSectionData {
+  type: 'checkmark_callout';
+  items: Array<{
+    heading: string;
+    body: string;
+  }>;
+}
+
+/**
+ * Ruled Subheader — centered text between horizontal rules.
+ * Used for section dividers like "Dose modification steps to consider:"
+ */
+export interface RuledSubheaderSectionData {
+  type: 'ruled_subheader';
+  text: string;
+}
+
+/**
+ * QR CTA — left-accent callout with text and a QR code image alongside.
+ * Used for "Learn more" with scannable QR code.
+ */
+export interface QRCTASectionData {
+  type: 'qr_cta';
+  text: string;
+  /** QR code image artifact */
+  qrArtifactId?: string;
+  qrArtifactUrl?: string;
+  /** Small note below QR (e.g., "Data rates may apply.") */
+  footnote?: string;
 }
 
 // =============================================================================

@@ -13,6 +13,7 @@ import type {
   SystemGraphicPreset,
   BrandSettings,
   Artifact,
+  FlashcardTemplate,
 } from './types';
 
 // ---------------------------------------------------------------------------
@@ -20,11 +21,28 @@ import type {
 // ---------------------------------------------------------------------------
 
 export function generateFlashcardHTML(config: FlashcardConfig): string {
-  const { brand, pageSize, systemGraphic, pages, isi } = config;
+  const { brand, pageSize, systemGraphic, pages, isi, template } = config;
 
   const dims = getPageDimensions(config);
   const css = buildCSS(config, dims);
-  const pagesHTML = pages.map((p, i) => buildPage(p, i, config, dims)).join('\n');
+
+  let pagesHTML: string;
+
+  if (template === 'announcement') {
+    // Tri-fold layout: group pages into spreads of 3
+    const spreads: FlashcardPage[][] = [];
+    for (let i = 0; i < pages.length; i += 3) {
+      spreads.push(pages.slice(i, i + 3));
+    }
+    pagesHTML = spreads
+      .map(
+        (spread, si) =>
+          `<div class="fc-spread" data-spread="${si + 1}">${spread.map((p, pi) => buildPage(p, si * 3 + pi, config, dims)).join('\n')}</div>`,
+      )
+      .join('\n');
+  } else {
+    pagesHTML = pages.map((p, i) => buildPage(p, i, config, dims)).join('\n');
+  }
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -616,6 +634,184 @@ function buildCSS(config: FlashcardConfig, dims: PageDims): string {
       color: ${text};
     }
 
+    /* Background image layer */
+    .fc-bg-image {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    .fc-bg-image img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .fc-bg-image.bg-bottom img { object-position: center bottom; }
+    .fc-bg-image.bg-top img { object-position: center top; }
+    .fc-bg-image.bg-center img { object-position: center center; }
+
+    .fc-bg-overlay {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+    }
+
+    /* Checkmark callout */
+    .fc-checkmark-callout {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .fc-checkmark-item {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+
+    .fc-checkmark-icon {
+      flex-shrink: 0;
+      width: 28px;
+      height: 28px;
+      color: ${primary};
+      font-size: 24px;
+      line-height: 28px;
+    }
+
+    .fc-checkmark-content {
+      flex: 1;
+    }
+
+    .fc-checkmark-content .cm-heading {
+      font-family: '${headlineFont}', sans-serif;
+      font-size: 13px;
+      font-weight: 700;
+      color: ${text};
+      margin-bottom: 2px;
+    }
+
+    .fc-checkmark-content .cm-body {
+      font-size: 12px;
+      color: ${text};
+      line-height: 1.5;
+    }
+
+    /* Ruled subheader */
+    .fc-ruled-subheader {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 12px 0;
+    }
+
+    .fc-ruled-subheader .rule {
+      flex: 1;
+      height: 1px;
+      background: ${text};
+    }
+
+    .fc-ruled-subheader .label {
+      font-family: '${headlineFont}', sans-serif;
+      font-size: 15px;
+      font-weight: 700;
+      color: ${text};
+      white-space: nowrap;
+    }
+
+    /* QR CTA */
+    .fc-qr-cta {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      padding: 20px 24px;
+      background: #f5f5f5;
+      border-left: 5px solid ${primary};
+      border-radius: 0 8px 8px 0;
+    }
+
+    .fc-qr-cta .qr-text {
+      flex: 1;
+      font-family: '${headlineFont}', sans-serif;
+      font-size: 16px;
+      font-weight: 700;
+      color: ${primary};
+      line-height: 1.4;
+    }
+
+    .fc-qr-cta .qr-right {
+      text-align: center;
+    }
+
+    .fc-qr-cta .qr-right img {
+      width: 80px;
+      height: 80px;
+      object-fit: contain;
+    }
+
+    .fc-qr-cta .qr-footnote {
+      font-size: 9px;
+      color: #666;
+      margin-top: 4px;
+    }
+
+    /* Enhanced footer with multi-logo */
+    .fc-footer-enhanced {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      font-size: 8px;
+      color: #888;
+    }
+
+    .fc-footer-enhanced .legal-lines {
+      line-height: 1.5;
+    }
+
+    .fc-footer-enhanced .legal-lines .bold-line {
+      font-weight: 700;
+      color: ${text};
+    }
+
+    .fc-footer-enhanced .logo-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-top: 8px;
+      border-top: 1px solid #e0e0e0;
+    }
+
+    .fc-footer-enhanced .logo-bar img {
+      max-height: 32px;
+      object-fit: contain;
+    }
+
+    .fc-footer-enhanced .product-logos {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .fc-footer-enhanced .product-logos .plus {
+      font-size: 14px;
+      color: #666;
+      font-weight: 600;
+    }
+
+    /* Tri-fold spread layout */
+    .fc-spread {
+      display: flex;
+      flex-direction: row;
+    }
+
+    .fc-spread .fc-page {
+      box-shadow: none;
+      flex-shrink: 0;
+    }
+
     /* Print styles */
     @media print {
       body {
@@ -683,8 +879,17 @@ function buildSystemGraphicCSS(preset: SystemGraphicPreset, primary: string, acc
 function buildPage(page: FlashcardPage, index: number, config: FlashcardConfig, dims: PageDims): string {
   const sectionsHTML = page.sections.map((s) => buildSection(s, config)).join('\n');
 
+  const bgPosClass = page.backgroundPosition ? `bg-${page.backgroundPosition}` : '';
+  const bgLayer = page.backgroundArtifactUrl
+    ? `<div class="fc-bg-image ${bgPosClass}">
+        <img src="${escapeHTML(page.backgroundArtifactUrl)}" alt="" />
+        ${page.backgroundOverlay ? `<div class="fc-bg-overlay" style="background:${escapeHTML(page.backgroundOverlay)}"></div>` : ''}
+      </div>`
+    : '';
+
   return `
-    <div class="fc-page" data-page="${index + 1}" data-label="${escapeHTML(page.label)}">
+    <div class="fc-page" data-page="${index + 1}" data-label="${escapeHTML(page.label)}"${page.foldRole ? ` data-fold-role="${page.foldRole}"` : ''}>
+      ${bgLayer}
       <div class="fc-content">
         ${sectionsHTML}
       </div>
@@ -971,12 +1176,44 @@ function buildSection(section: FlashcardSection, config: FlashcardConfig): strin
       break;
 
     case 'footer':
-      inner = `
-        <div class="fc-footer">
-          <div>${data.legalLine ? escapeHTML(data.legalLine) : ''}</div>
-          <div>${data.jobCode ? escapeHTML(data.jobCode) : ''} ${data.date ? `| ${escapeHTML(data.date)}` : ''}</div>
-        </div>
-      `;
+      if (data.productLogos?.length || data.legalLines?.length || data.copyrightLine) {
+        // Enhanced multi-logo footer
+        const legalLinesHTML = (data.legalLines || [])
+          .map((line) => {
+            const isBold = line.startsWith('**') && line.endsWith('**');
+            const cleanLine = isBold ? line.slice(2, -2) : line;
+            return `<div${isBold ? ' class="bold-line"' : ''}>${escapeHTML(cleanLine)}</div>`;
+          })
+          .join('');
+        const productLogosHTML = (data.productLogos || [])
+          .map((logo, i) => {
+            const img = logo.artifactUrl
+              ? `<img src="${escapeHTML(logo.artifactUrl)}" alt="${escapeHTML(logo.alt)}" />`
+              : `<span style="font-size:10px;color:#666;">${escapeHTML(logo.alt)}</span>`;
+            return (i > 0 ? '<span class="plus">+</span>' : '') + img;
+          })
+          .join('');
+        inner = `
+          <div class="fc-footer-enhanced">
+            ${data.legalLine ? `<div>${escapeHTML(data.legalLine)}</div>` : ''}
+            ${legalLinesHTML ? `<div class="legal-lines">${legalLinesHTML}</div>` : ''}
+            ${data.copyrightLine ? `<div>${escapeHTML(data.copyrightLine)}</div>` : ''}
+            ${data.jobCode ? `<div>${escapeHTML(data.jobCode)}${data.date ? ` | ${escapeHTML(data.date)}` : ''}</div>` : ''}
+            <div class="logo-bar">
+              <div>${data.corporateLogoArtifactUrl ? `<img src="${escapeHTML(data.corporateLogoArtifactUrl)}" alt="Corporate logo" />` : ''}</div>
+              ${productLogosHTML ? `<div class="product-logos">${productLogosHTML}</div>` : ''}
+            </div>
+          </div>
+        `;
+      } else {
+        // Legacy simple footer
+        inner = `
+          <div class="fc-footer">
+            <div>${data.legalLine ? escapeHTML(data.legalLine) : ''}</div>
+            <div>${data.jobCode ? escapeHTML(data.jobCode) : ''} ${data.date ? `| ${escapeHTML(data.date)}` : ''}</div>
+          </div>
+        `;
+      }
       break;
 
     case 'divider':
@@ -991,6 +1228,50 @@ function buildSection(section: FlashcardSection, config: FlashcardConfig): strin
           inner = '<div class="fc-divider-space"></div>';
           break;
       }
+      break;
+
+    case 'checkmark_callout':
+      inner = `
+        <div class="fc-checkmark-callout">
+          ${data.items
+            .map(
+              (item) => `
+            <div class="fc-checkmark-item">
+              <div class="fc-checkmark-icon">✓</div>
+              <div class="fc-checkmark-content">
+                <div class="cm-heading">${escapeHTML(item.heading)}</div>
+                <div class="cm-body">${escapeHTML(item.body)}</div>
+              </div>
+            </div>
+          `,
+            )
+            .join('')}
+        </div>
+      `;
+      break;
+
+    case 'ruled_subheader':
+      inner = `
+        <div class="fc-ruled-subheader">
+          <div class="rule"></div>
+          <div class="label">${escapeHTML(data.text)}</div>
+          <div class="rule"></div>
+        </div>
+      `;
+      break;
+
+    case 'qr_cta':
+      inner = `
+        <div class="fc-qr-cta">
+          <div class="qr-text">${escapeHTML(data.text)}</div>
+          <div class="qr-right">
+            ${data.qrArtifactUrl
+              ? `<img src="${escapeHTML(data.qrArtifactUrl)}" alt="QR Code" />`
+              : '<div class="fc-image-placeholder" style="width:80px;height:80px;font-size:9px;">QR Code</div>'}
+            ${data.footnote ? `<div class="qr-footnote">${escapeHTML(data.footnote)}</div>` : ''}
+          </div>
+        </div>
+      `;
       break;
   }
 
