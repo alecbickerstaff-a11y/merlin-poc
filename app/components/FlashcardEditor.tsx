@@ -838,6 +838,12 @@ export default function FlashcardEditor() {
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saved' | 'error'>('idle');
 
+  // AI generation state
+  const [aiKeyMessage, setAiKeyMessage] = useState('');
+  const [aiVisualTone, setAiVisualTone] = useState('Warm & Hopeful');
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+
   const activePage = config.pages[activePageIndex] || config.pages[0];
   const selectedSection = activePage?.sections.find((s) => s.id === selectedSectionId) || null;
 
@@ -952,6 +958,50 @@ export default function FlashcardEditor() {
     setSelectedSectionId(null);
   };
 
+  // ── AI Generation ──────────────────────────────────────────────────────────
+
+  const handleAIGenerate = async () => {
+    if (!aiKeyMessage.trim()) return;
+    setAiError(null);
+    setAiGenerating(true);
+
+    try {
+      const res = await fetch('/api/generate-flashcard', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          keyMessage: aiKeyMessage.trim(),
+          visualTone: aiVisualTone,
+          template: config.template || 'standard',
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setAiError(data.error || `Request failed (${res.status})`);
+        return;
+      }
+
+      // Apply generated pages to config
+      if (data.pages && Array.isArray(data.pages)) {
+        updateConfig((prev) => ({
+          ...prev,
+          template: (data.pages.length > 4 ? 'announcement' : prev.template || 'standard') as FlashcardTemplate,
+          pageSize: data.pages.length > 4 ? 'letter-portrait' : prev.pageSize,
+          pages: data.pages,
+        }));
+        setActivePageIndex(0);
+        setSelectedSectionId(null);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Network error';
+      setAiError(msg);
+    } finally {
+      setAiGenerating(false);
+    }
+  };
+
   // ── Save to Assets ─────────────────────────────────────────────────────────
 
   const saveToAssets = async () => {
@@ -1024,6 +1074,92 @@ export default function FlashcardEditor() {
           borderRight: '1px solid var(--border)',
         }}
       >
+        {/* ── AI Generation panel ─────────────────────────────────── */}
+        <div style={{ padding: '14px', borderBottom: '1px solid var(--border)', background: 'var(--bg-dark)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px' }}>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M8 1L10 5.5L15 6.5L11.5 10L12.5 15L8 12.5L3.5 15L4.5 10L1 6.5L6 5.5L8 1Z" fill="var(--accent)" stroke="var(--accent)" strokeWidth="0.5" />
+            </svg>
+            <span style={{ fontFamily: 'var(--font-montserrat), Montserrat, sans-serif', fontWeight: 700, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.8px', color: 'var(--accent)' }}>
+              Generate with AI
+            </span>
+          </div>
+
+          <label style={{ display: 'block', fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '4px' }}>
+            Key Message
+          </label>
+          <textarea
+            rows={3}
+            placeholder="e.g., Highlight efficacy data and once-daily dosing convenience"
+            value={aiKeyMessage}
+            onChange={(e) => setAiKeyMessage(e.target.value)}
+            disabled={aiGenerating}
+            style={{ resize: 'vertical', marginBottom: '8px', opacity: aiGenerating ? 0.6 : 1, width: '100%', fontSize: '11px', padding: '6px 8px', borderRadius: '5px', border: '1px solid var(--border)', background: 'var(--bg-darkest)', color: 'var(--text-primary)' }}
+          />
+
+          <label style={{ display: 'block', fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '4px' }}>
+            Visual Tone
+          </label>
+          <select
+            value={aiVisualTone}
+            onChange={(e) => setAiVisualTone(e.target.value)}
+            disabled={aiGenerating}
+            style={{ ...selectStyle, marginBottom: '12px', opacity: aiGenerating ? 0.6 : 1 }}
+          >
+            <option value="Warm & Hopeful">Warm &amp; Hopeful</option>
+            <option value="Clinical & Trustworthy">Clinical &amp; Trustworthy</option>
+            <option value="Active & Energetic">Active &amp; Energetic</option>
+            <option value="Calm & Reassuring">Calm &amp; Reassuring</option>
+          </select>
+
+          <button
+            onClick={handleAIGenerate}
+            disabled={aiGenerating || !aiKeyMessage.trim()}
+            style={{
+              width: '100%',
+              padding: '10px 16px',
+              fontSize: '12px',
+              fontFamily: 'var(--font-montserrat), Montserrat, sans-serif',
+              fontWeight: 700,
+              backgroundColor: aiGenerating ? 'var(--bg-mid)' : 'var(--accent)',
+              border: '1px solid var(--accent)',
+              color: aiGenerating ? 'var(--text-secondary)' : '#000',
+              borderRadius: '6px',
+              cursor: aiGenerating || !aiKeyMessage.trim() ? 'not-allowed' : 'pointer',
+              transition: 'all 0.15s',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              opacity: !aiKeyMessage.trim() && !aiGenerating ? 0.5 : 1,
+            }}
+          >
+            {aiGenerating ? (
+              <>
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ animation: 'spin 1s linear infinite' }}>
+                  <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+                  <circle cx="8" cy="8" r="6" stroke="var(--text-muted)" strokeWidth="2" fill="none" />
+                  <path d="M14 8a6 6 0 0 0-6-6" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+                Generating...
+              </>
+            ) : (
+              <>
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                  <path d="M8 1L10 5.5L15 6.5L11.5 10L12.5 15L8 12.5L3.5 15L4.5 10L1 6.5L6 5.5L8 1Z" fill="currentColor" />
+                </svg>
+                Generate Leave Behind
+              </>
+            )}
+          </button>
+
+          {aiError && (
+            <div style={{ marginTop: '10px', padding: '8px 10px', backgroundColor: 'rgba(231, 76, 60, 0.15)', border: '1px solid rgba(231, 76, 60, 0.4)', borderRadius: '4px', fontSize: '11px', color: '#E74C3C', lineHeight: '1.4' }}>
+              {aiError}
+            </div>
+          )}
+        </div>
+
         {/* Document settings */}
         <div style={{ padding: '12px', borderBottom: '1px solid var(--border)' }}>
           <h3
