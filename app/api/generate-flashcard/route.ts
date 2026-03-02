@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { FlashcardPage, FlashcardSection, FlashcardTemplate } from '../../../lib/types';
+import { assignArtifactsToPages } from '../../../lib/artifact-matcher';
 
 // ── POST /api/generate-flashcard ─────────────────────────────────────────────
 // Generates a FlashcardConfig (pages + sections) from a key message and tone.
@@ -42,6 +43,14 @@ export async function POST(req: NextRequest) {
 
         if (response.ok) {
           const data = await response.json();
+          // Enrich n8n-generated pages with artifacts from the library
+          if (data.pages && Array.isArray(data.pages)) {
+            try {
+              data.pages = await assignArtifactsToPages(data.pages, visualTone, keyMessage);
+            } catch (err) {
+              console.warn('[generate-flashcard] Artifact matching failed on n8n pages:', err);
+            }
+          }
           return NextResponse.json(data);
         }
       } catch {
@@ -51,10 +60,18 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Built-in generator ─────────────────────────────────────────────────
-    const pages =
+    const rawPages =
       template === 'announcement'
         ? generateAnnouncementPages(keyMessage, visualTone)
         : generateStandardPages(keyMessage, visualTone);
+
+    // Auto-assign artifacts from the library (graceful: falls back to raw pages)
+    let pages = rawPages;
+    try {
+      pages = await assignArtifactsToPages(rawPages, visualTone, keyMessage);
+    } catch (err) {
+      console.warn('[generate-flashcard] Artifact matching failed:', err);
+    }
 
     return NextResponse.json({ pages, generated: true });
   } catch (err: unknown) {

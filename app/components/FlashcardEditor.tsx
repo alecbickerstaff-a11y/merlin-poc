@@ -1094,8 +1094,40 @@ export default function FlashcardEditor() {
             value={aiKeyMessage}
             onChange={(e) => setAiKeyMessage(e.target.value)}
             disabled={aiGenerating}
-            style={{ resize: 'vertical', marginBottom: '8px', opacity: aiGenerating ? 0.6 : 1, width: '100%', fontSize: '11px', padding: '6px 8px', borderRadius: '5px', border: '1px solid var(--border)', background: 'var(--bg-darkest)', color: 'var(--text-primary)' }}
+            style={{ resize: 'vertical', marginBottom: '6px', opacity: aiGenerating ? 0.6 : 1, width: '100%', fontSize: '11px', padding: '6px 8px', borderRadius: '5px', border: '1px solid var(--border)', background: 'var(--bg-darkest)', color: 'var(--text-primary)' }}
           />
+
+          {/* Suggested prompt chips */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '10px' }}>
+            {[
+              { label: 'Efficacy + Dosing', text: 'Highlight VELARA efficacy data showing 52% ACR20 response at Week 24 and the convenience of once-daily oral dosing for moderate-to-severe chronic inflammatory joint disease' },
+              { label: 'New Approval', text: 'Announce the approval of VELARA (celipruvant) 10mg for moderate-to-severe CIJD with key clinical trial results and safety profile overview' },
+              { label: 'Patient Freedom', text: 'Emphasize how VELARA helps patients move beyond pain with proven efficacy, convenient oral dosing, and no injections required' },
+              { label: 'HCP Clinical', text: 'Present the Phase 3 clinical data for VELARA including primary endpoint results, ACR20 response rates, and established safety profile for HCP review' },
+            ].map((p) => (
+              <button
+                key={p.label}
+                onClick={() => setAiKeyMessage(p.text)}
+                disabled={aiGenerating}
+                style={{
+                  padding: '2px 8px',
+                  fontSize: '9px',
+                  fontWeight: 600,
+                  fontFamily: 'var(--font-montserrat), Montserrat, sans-serif',
+                  color: 'var(--accent)',
+                  background: 'rgba(243, 156, 18, 0.08)',
+                  border: '1px solid rgba(243, 156, 18, 0.35)',
+                  borderRadius: '12px',
+                  cursor: aiGenerating ? 'not-allowed' : 'pointer',
+                  opacity: aiGenerating ? 0.4 : 0.85,
+                  transition: 'all 0.15s',
+                  lineHeight: '16px',
+                }}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
 
           <label style={{ display: 'block', fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '4px' }}>
             Visual Tone
