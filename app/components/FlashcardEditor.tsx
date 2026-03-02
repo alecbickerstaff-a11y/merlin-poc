@@ -348,6 +348,273 @@ function generateId(): string {
 }
 
 // =============================================================================
+// Announcement Tri-fold Preset — pre-populated sections matching Figma layout
+// =============================================================================
+
+function buildAnnouncementPreset(): FlashcardPage[] {
+  return [
+    // ── Fold 1: Hero + Efficacy Data ──────────────────────────────
+    {
+      id: 'fold-1',
+      label: 'Fold 1 — Hero',
+      sections: [
+        {
+          id: generateId(),
+          type: 'hero',
+          colSpan: 12,
+          colStart: 1,
+          data: {
+            type: 'hero',
+            eyebrow: 'NOW APPROVED',
+            headline: 'A new treatment option for moderate-to-severe chronic inflammatory joint disease',
+            subheadline: 'VELARA (celipruvant) 10mg — Once-daily oral dosing',
+          },
+        },
+        {
+          id: generateId(),
+          type: 'divider',
+          colSpan: 12,
+          colStart: 1,
+          data: { type: 'divider', style: 'accent' },
+        },
+        {
+          id: generateId(),
+          type: 'visualization',
+          colSpan: 12,
+          colStart: 1,
+          data: {
+            type: 'visualization',
+            title: 'Dosing Diagram',
+            alt: 'VELARA dosing schedule diagram',
+            caption: 'Upload approved dosing diagram artifact',
+          },
+        },
+        {
+          id: generateId(),
+          type: 'checkmark_callout',
+          colSpan: 12,
+          colStart: 1,
+          data: {
+            type: 'checkmark_callout',
+            items: [
+              {
+                heading: 'Proven Efficacy',
+                body: '52% of patients achieved ACR20 response at Week 24 (p<0.001 vs placebo)',
+              },
+              {
+                heading: 'Convenient Dosing',
+                body: 'Once-daily oral tablet — no injections, no infusions',
+              },
+              {
+                heading: 'Familiar Tolerability',
+                body: 'Safety profile consistent with the known class effects. See ISI for full details.',
+              },
+            ],
+          },
+        },
+      ],
+      foldRole: 'content' as const,
+    },
+
+    // ── Fold 2: Steps + QR CTA ────────────────────────────────────
+    {
+      id: 'fold-2',
+      label: 'Fold 2 — Details',
+      sections: [
+        {
+          id: generateId(),
+          type: 'headline',
+          colSpan: 12,
+          colStart: 1,
+          data: {
+            type: 'headline',
+            text: 'Significant joint pain relief vs. placebo at Week 12',
+            level: 'h2',
+          },
+        },
+        {
+          id: generateId(),
+          type: 'body_text',
+          colSpan: 12,
+          colStart: 1,
+          data: {
+            type: 'body_text',
+            text: 'VELARA significantly reduced joint pain vs. placebo at Week 12 (p<0.001). Results were sustained through Week 24 across all endpoints.',
+          },
+        },
+        {
+          id: generateId(),
+          type: 'ruled_subheader',
+          colSpan: 12,
+          colStart: 1,
+          data: {
+            type: 'ruled_subheader',
+            text: 'Dose modification steps to consider:',
+          },
+        },
+        {
+          id: generateId(),
+          type: 'icon_flow',
+          colSpan: 12,
+          colStart: 1,
+          data: {
+            type: 'icon_flow',
+            showConnectors: true,
+            steps: [
+              { title: 'Assess', description: 'Evaluate disease activity and risk factors' },
+              { title: 'Initiate', description: 'Start VELARA 10mg once daily' },
+              { title: 'Monitor', description: 'Check LFTs monthly for first 6 months' },
+              { title: 'Adjust', description: 'Modify dose based on response and tolerability' },
+            ],
+          },
+        },
+        {
+          id: generateId(),
+          type: 'body_text',
+          colSpan: 12,
+          colStart: 1,
+          data: {
+            type: 'body_text',
+            text: 'Do not initiate VELARA during an active, serious infection. See full Prescribing Information for complete dosing and administration details.',
+            bullets: false,
+          },
+        },
+        {
+          id: generateId(),
+          type: 'qr_cta',
+          colSpan: 12,
+          colStart: 1,
+          data: {
+            type: 'qr_cta',
+            text: 'For more information, scan the QR code or visit velara-hcp.com',
+            footnote: 'Data rates may apply.',
+          },
+        },
+      ],
+      foldRole: 'content' as const,
+    },
+
+    // ── Fold 3: References + Footer ───────────────────────────────
+    {
+      id: 'fold-3',
+      label: 'Fold 3 — References & Footer',
+      sections: [
+        {
+          id: generateId(),
+          type: 'headline',
+          colSpan: 12,
+          colStart: 1,
+          data: {
+            type: 'headline',
+            text: 'Drug Interactions',
+            level: 'h3',
+          },
+        },
+        {
+          id: generateId(),
+          type: 'body_text',
+          colSpan: 12,
+          colStart: 1,
+          data: {
+            type: 'body_text',
+            text: 'Avoid concomitant use with strong immunosuppressants.\nUse caution with live vaccines.\nMonitor closely when co-administered with CYP3A4 inhibitors.\nSee Full Prescribing Information for complete drug interaction details.',
+            bullets: true,
+          },
+        },
+        {
+          id: generateId(),
+          type: 'divider',
+          colSpan: 12,
+          colStart: 1,
+          data: { type: 'divider', style: 'line' },
+        },
+        {
+          id: generateId(),
+          type: 'references',
+          colSpan: 12,
+          colStart: 1,
+          data: {
+            type: 'references',
+            items: [
+              'VELARA [prescribing information]. Fictional Pharma Corp; 2026.',
+              'Smith J, et al. Celipruvant in moderate-to-severe CIJD: Phase 3 results. J Rheumatol. 2026;00:000-000.',
+              'Data on file. Fictional Pharma Corp. Study VELARA-301.',
+            ],
+          },
+        },
+        {
+          id: generateId(),
+          type: 'footer',
+          colSpan: 12,
+          colStart: 1,
+          data: {
+            type: 'footer',
+            legalLine: 'Please see Brief Summary of full Prescribing Information, including Boxed Warning, on adjacent page.',
+            legalLines: [
+              '**Please see full Prescribing Information, including Boxed Warning, at velara-hcp.com.**',
+              'VELARA is a registered trademark of Fictional Pharma Corp.',
+            ],
+            copyrightLine: '\u00A9 2026 Fictional Pharma Corp. All rights reserved.',
+            jobCode: 'cp-000000v1',
+            date: '01/26',
+            productLogos: [
+              { alt: 'VELARA Logo' },
+            ],
+          },
+        },
+      ],
+      foldRole: 'content' as const,
+    },
+
+    // ── Fold 4: ISI (back) ────────────────────────────────────────
+    {
+      id: 'fold-4',
+      label: 'Fold 4 — ISI',
+      sections: [
+        {
+          id: generateId(),
+          type: 'headline',
+          colSpan: 12,
+          colStart: 1,
+          data: {
+            type: 'headline',
+            text: 'Important Safety Information',
+            level: 'h2',
+          },
+        },
+        {
+          id: generateId(),
+          type: 'isi_block',
+          colSpan: 12,
+          colStart: 1,
+          data: {
+            type: 'isi_block',
+            variant: 'full',
+          },
+        },
+      ],
+      foldRole: 'isi' as const,
+    },
+
+    // ── Blank panel ───────────────────────────────────────────────
+    {
+      id: 'fold-blank',
+      label: 'Blank',
+      sections: [],
+      foldRole: 'blank' as const,
+    },
+
+    // ── Glue panel ────────────────────────────────────────────────
+    {
+      id: 'fold-glue',
+      label: 'Glue',
+      sections: [],
+      foldRole: 'glue' as const,
+    },
+  ];
+}
+
+// =============================================================================
 // Section preview card on canvas
 // =============================================================================
 
@@ -377,7 +644,7 @@ function SectionCard({
       onClick={onSelect}
       style={{
         gridColumn: `${section.colStart} / span ${section.colSpan}`,
-        background: isSelected ? 'var(--accent-dim)' : 'var(--bg-dark)',
+        background: isSelected ? 'var(--accent-dim)' : 'rgba(22, 22, 36, 0.92)',
         border: `1px solid ${isSelected ? 'var(--accent)' : 'var(--border)'}`,
         borderRadius: '6px',
         padding: '10px 12px',
@@ -385,6 +652,8 @@ function SectionCard({
         transition: 'all 0.15s',
         position: 'relative',
         minHeight: '60px',
+        zIndex: 1,
+        backdropFilter: 'blur(8px)',
       }}
     >
       {/* Type badge */}
@@ -780,14 +1049,7 @@ export default function FlashcardEditor() {
                   ...prev,
                   template: 'announcement',
                   pageSize: 'letter-portrait',
-                  pages: [
-                    { id: 'fold-1', label: 'Fold 1', sections: [], foldRole: 'content' as const },
-                    { id: 'fold-2', label: 'Fold 2', sections: [], foldRole: 'content' as const },
-                    { id: 'fold-3', label: 'Fold 3 (Content + Footer)', sections: [], foldRole: 'content' as const },
-                    { id: 'fold-4', label: 'Fold 4 (ISI)', sections: [], foldRole: 'isi' as const },
-                    { id: 'fold-blank', label: 'Blank', sections: [], foldRole: 'blank' as const },
-                    { id: 'fold-glue', label: 'Glue', sections: [], foldRole: 'glue' as const },
-                  ],
+                  pages: buildAnnouncementPreset(),
                 }));
                 setActivePageIndex(0);
                 setSelectedSectionId(null);
@@ -1114,20 +1376,53 @@ export default function FlashcardEditor() {
                 height: '100%',
                 color: 'var(--text-muted)',
                 userSelect: 'none',
+                maxWidth: '900px',
+                margin: '0 auto',
+                width: '100%',
+                minHeight: '400px',
+                borderRadius: '8px',
+                border: '1px solid var(--border)',
+                position: 'relative',
+                overflow: 'hidden',
+                backgroundImage: activePage.backgroundArtifactUrl
+                  ? `url(${activePage.backgroundArtifactUrl})`
+                  : config.template === 'announcement'
+                    ? 'linear-gradient(170deg, #B8860B 0%, #DAA520 25%, #E8C666 50%, #DAA520 75%, #B8860B 100%)'
+                    : 'none',
+                backgroundColor: (!activePage.backgroundArtifactUrl && config.template !== 'announcement')
+                  ? 'var(--bg-dark)'
+                  : 'transparent',
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
               }}
             >
-              <svg width="40" height="40" viewBox="0 0 16 16" fill="none" style={{ opacity: 0.2, marginBottom: '12px' }}>
-                <rect x="2" y="1" width="12" height="14" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
-                <line x1="5" y1="5" x2="11" y2="5" stroke="currentColor" strokeWidth="1" />
-                <line x1="5" y1="8" x2="11" y2="8" stroke="currentColor" strokeWidth="1" />
-                <line x1="5" y1="11" x2="9" y2="11" stroke="currentColor" strokeWidth="1" />
-              </svg>
-              <p style={{ fontSize: '14px', fontWeight: 600, marginBottom: '4px', color: 'var(--text-secondary)' }}>
-                Empty page
-              </p>
-              <p style={{ fontSize: '12px', margin: 0 }}>
-                Click a section template from the left panel to start building
-              </p>
+              {(activePage.backgroundArtifactUrl || config.template === 'announcement') && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    backgroundColor: activePage.backgroundOverlay || 'rgba(255,255,255,0.75)',
+                    pointerEvents: 'none',
+                    zIndex: 0,
+                  }}
+                />
+              )}
+              <div style={{ position: 'relative', zIndex: 1, textAlign: 'center' }}>
+                <svg width="40" height="40" viewBox="0 0 16 16" fill="none" style={{ opacity: 0.2, marginBottom: '12px' }}>
+                  <rect x="2" y="1" width="12" height="14" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
+                  <line x1="5" y1="5" x2="11" y2="5" stroke="currentColor" strokeWidth="1" />
+                  <line x1="5" y1="8" x2="11" y2="8" stroke="currentColor" strokeWidth="1" />
+                  <line x1="5" y1="11" x2="9" y2="11" stroke="currentColor" strokeWidth="1" />
+                </svg>
+                <p style={{ fontSize: '14px', fontWeight: 600, marginBottom: '4px', color: 'var(--text-secondary)' }}>
+                  {activePage.foldRole === 'blank' ? 'Blank panel' : activePage.foldRole === 'glue' ? 'Glue panel' : 'Empty page'}
+                </p>
+                <p style={{ fontSize: '12px', margin: 0 }}>
+                  {activePage.foldRole === 'blank' || activePage.foldRole === 'glue'
+                    ? 'This panel is intentionally empty'
+                    : 'Click a section template from the left panel to start building'}
+                </p>
+              </div>
             </div>
           ) : (
             <div
@@ -1137,13 +1432,39 @@ export default function FlashcardEditor() {
                 gap: '8px',
                 maxWidth: '900px',
                 margin: '0 auto',
-                background: 'var(--bg-dark)',
+                backgroundImage: activePage.backgroundArtifactUrl
+                  ? `url(${activePage.backgroundArtifactUrl})`
+                  : config.template === 'announcement'
+                    ? 'linear-gradient(170deg, #B8860B 0%, #DAA520 25%, #E8C666 50%, #DAA520 75%, #B8860B 100%)'
+                    : 'none',
+                backgroundColor: (!activePage.backgroundArtifactUrl && config.template !== 'announcement')
+                  ? 'var(--bg-dark)'
+                  : 'transparent',
+                backgroundSize: 'cover',
+                backgroundPosition: activePage.backgroundPosition === 'bottom' ? 'center bottom'
+                  : activePage.backgroundPosition === 'top' ? 'center top'
+                  : 'center center',
                 border: '1px solid var(--border)',
                 borderRadius: '8px',
                 padding: '16px',
                 minHeight: '400px',
+                position: 'relative',
+                overflow: 'hidden',
               }}
             >
+              {/* Background overlay for readability */}
+              {(activePage.backgroundArtifactUrl || config.template === 'announcement') && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    backgroundColor: activePage.backgroundOverlay || 'rgba(255,255,255,0.75)',
+                    pointerEvents: 'none',
+                    borderRadius: '8px',
+                    zIndex: 0,
+                  }}
+                />
+              )}
               {activePage.sections.map((section, idx) => (
                 <SectionCard
                   key={section.id}
