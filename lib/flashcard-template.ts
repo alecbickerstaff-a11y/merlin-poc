@@ -4,6 +4,24 @@
 // Takes a FlashcardConfig and returns a fully self-contained HTML string that
 // renders a print-ready flashcard document. Follows Tremfya-style brand
 // system with 12-column grid, system graphics, and brand typography.
+//
+// Tri-fold "Slim Jim" layout:
+//   SIDE A (Outside, face-up when folded):
+//     ┌─────────────┬─────────────┬─────────────┐
+//     │  Panel 6    │  Panel 1    │  Panel 2    │
+//     │  (Glue)     │  (Hero)     │  (Details)  │
+//     │  Left flap  │  Front      │  Back flap  │
+//     └─────────────┴─────────────┴─────────────┘
+//
+//   SIDE B (Inside, visible when fully opened):
+//     ┌─────────────┬─────────────┬─────────────┐
+//     │  Panel 3    │  Panel 4    │  Panel 5    │
+//     │  (Refs)     │  (ISI)      │  (Blank)    │
+//     │  Left       │  Center     │  Right      │
+//     └─────────────┴─────────────┴─────────────┘
+//
+// Each panel: 8.5" × 11" portrait (816 × 1056px at 96dpi)
+// Spread width: 25.5" (2448px) — scaled to fit viewport
 // =============================================================================
 
 import type {
@@ -11,9 +29,6 @@ import type {
   FlashcardPage,
   FlashcardSection,
   SystemGraphicPreset,
-  BrandSettings,
-  Artifact,
-  FlashcardTemplate,
 } from './types';
 
 // ---------------------------------------------------------------------------
@@ -25,39 +40,277 @@ export function generateFlashcardHTML(config: FlashcardConfig): string {
 
   const dims = getPageDimensions(config);
   const css = buildCSS(config, dims);
+  const isTriFold = template === 'announcement';
+  const spreadWidth = dims.width * 3;
 
   let pagesHTML: string;
 
-  if (template === 'announcement') {
-    // Tri-fold layout: group pages into spreads of 3
-    const spreads: FlashcardPage[][] = [];
-    for (let i = 0; i < pages.length; i += 3) {
-      spreads.push(pages.slice(i, i + 3));
-    }
-    pagesHTML = spreads
-      .map(
-        (spread, si) =>
-          `<div class="fc-spread" data-spread="${si + 1}">${spread.map((p, pi) => buildPage(p, si * 3 + pi, config, dims)).join('\n')}</div>`,
-      )
-      .join('\n');
+  if (isTriFold) {
+    pagesHTML = buildTriFoldSpreads(pages, config, dims);
   } else {
     pagesHTML = pages.map((p, i) => buildPage(p, i, config, dims)).join('\n');
   }
+
+  const fontsLink = buildGoogleFontsLink(brand.typography.headlineFont, brand.typography.bodyFont);
+  const configMeta = JSON.stringify(config, null, 2);
+
+  // Inline script for responsive spread scaling (tri-fold only)
+  const scaleScript = isTriFold ? `
+<script>
+  // ── Responsive spread scaling ──────────────────────────────────────
+  // Each spread is ${spreadWidth}px wide (3 × ${dims.width}px panels).
+  // This script scales it to fit the browser viewport while maintaining
+  // aspect ratio. Runs on load and resize.
+  (function() {
+    var SPREAD_W = ${spreadWidth};
+    var PANEL_H = ${dims.height};
+    function scaleSpreads() {
+      var spreads = document.querySelectorAll('.fc-spread');
+      var available = window.innerWidth - 64;
+      var s = Math.min(1, available / SPREAD_W);
+      for (var i = 0; i < spreads.length; i++) {
+        spreads[i].style.transform = 'scale(' + s + ')';
+        // Negative margin compensates for the scaled-down height
+        spreads[i].style.marginBottom = (PANEL_H * (s - 1)) + 'px';
+      }
+    }
+    scaleSpreads();
+    window.addEventListener('resize', scaleSpreads);
+  })();
+</script>` : '';
 
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>${escapeHTML(brand.name)} — Leave Behind</title>
+<title>${escapeHTML(brand.name)} — Leave Behind${isTriFold ? ' (Tri-Fold)' : ''}</title>
+${fontsLink}
+<!--
+  ════════════════════════════════════════════════════════════════════════════
+  MERLIN — Leave-Behind Template Export
+  Generated: ${new Date().toISOString()}
+
+  Brand:     ${brand.name}
+  Template:  ${template || 'standard'}
+  Page Size: ${pageSize}
+  Panels:    ${pages.length}
+  Fonts:     ${brand.typography.headlineFont} (headlines), ${brand.typography.bodyFont} (body)
+  Colors:    Primary ${brand.colors.primary}, Accent ${brand.colors.accent}, BG ${brand.colors.background}
+
+  ${isTriFold ? `LAYOUT: Tri-Fold "Slim Jim"
+  ─────────────────────────────
+  Panel dimensions: ${dims.width} × ${dims.height}px (${dims.width / 96}" × ${dims.height / 96}" at 96dpi)
+  Spread dimensions: ${spreadWidth} × ${dims.height}px (${spreadWidth / 96}" × ${dims.height / 96}")
+
+  SIDE A (Outside — face-up when folded):
+    Panel 1: Glue Flap (left)  — hidden when folded, adhesive/blank
+    Panel 2: Front Cover (center) — visible face when document is folded
+    Panel 3: Back Flap (right) — folds over the front, tucks in
+
+  SIDE B (Inside — visible when fully opened):
+    Panel 4: Inside Left   — references, drug interactions
+    Panel 5: Inside Center — ISI (Important Safety Information)
+    Panel 6: Inside Right  — blank or continuation
+
+  FOLD INSTRUCTIONS:
+    1. Print Side A on front, Side B on back (duplex)
+    2. Fold right panel (Back Flap) LEFT over center
+    3. Fold left panel (Glue) RIGHT behind center
+    4. Front Cover is now face-up` : `LAYOUT: Standard
+  Pages: ${pages.map((p, i) => `${i + 1}. ${p.label}`).join(', ')}`}
+
+  CSS ARCHITECTURE:
+  ─────────────────
+  .fc-page            — Individual panel/page container (${dims.width}×${dims.height}px)
+  .fc-content          — 12-column CSS Grid content area
+  .fc-section          — Grid child, positioned via grid-column
+  .fc-spread           — Tri-fold spread (3 panels in a row)
+  .fc-spread-wrapper   — Spread + labels container
+  .fc-panel-label      — Position/role annotation overlay
+  .fc-fold-marks       — Dashed fold lines at ⅓ and ⅔
+  .fc-bg-image         — Background artifact layer (z-index: 0)
+  .fc-bg-overlay       — Semi-transparent overlay on backgrounds
+
+  SECTION TYPES:
+  ──────────────
+  hero               — Full-width hero with eyebrow + headline + subheadline
+  headline           — h1/h2/h3 heading with optional eyebrow
+  body_text           — Paragraph or bulleted list
+  stat_callout        — Stat circles or large numbers
+  visualization       — Chart/diagram artifact placeholder
+  bar_chart           — CSS bar chart or artifact image
+  line_chart          — Artifact-driven line chart
+  donut_chart         — CSS conic-gradient donut or artifact
+  data_table          — HTML table with highlighted rows
+  icon_row            — Horizontal icon strip
+  icon_flow           — Step flow with connectors (1 → 2 → 3 → 4)
+  dosing_timeline     — Phase-based dosing strip
+  image_block         — Photography/graphic artifact
+  cta_block           — Button, banner, or callout CTA
+  qr_cta              — QR code with text prompt
+  checkmark_callout   — Checkmark items (heading + body)
+  ruled_subheader     — Centered text with horizontal rules
+  isi_block           — Important Safety Information (2-column, 8px)
+  references          — Numbered reference list
+  footer              — Legal lines, logos, job code
+  divider             — Line, accent gradient, or whitespace
+
+  GRID SYSTEM:
+  ────────────
+  12-column grid with 12px gap
+  Each section has: colStart (1-12) and colSpan (1-12)
+  Example: colStart=1, colSpan=12 → full width
+           colStart=1, colSpan=6  → left half
+           colStart=7, colSpan=6  → right half
+
+  ════════════════════════════════════════════════════════════════════════════
+-->
 <style>
 ${css}
 </style>
 </head>
 <body>
 ${pagesHTML}
+${scaleScript}
+<!-- Configuration JSON (for programmatic consumption) -->
+<script type="application/json" id="merlin-config">
+${escapeHTML(configMeta)}
+</script>
 </body>
 </html>`;
+}
+
+// ---------------------------------------------------------------------------
+// Google Fonts (link tag instead of @import for reliable export)
+// ---------------------------------------------------------------------------
+
+function buildGoogleFontsLink(headlineFont: string, bodyFont: string): string {
+  const families: string[] = [];
+  if (!families.includes(headlineFont)) families.push(headlineFont);
+  if (!families.includes(bodyFont)) families.push(bodyFont);
+  const params = families
+    .map((f) => `family=${encodeURIComponent(f)}:wght@300;400;500;600;700;800`)
+    .join('&');
+  return `<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?${params}&display=swap" rel="stylesheet">`;
+}
+
+// ---------------------------------------------------------------------------
+// Tri-fold spread builder — documented panel positions
+// ---------------------------------------------------------------------------
+
+function buildTriFoldSpreads(pages: FlashcardPage[], config: FlashcardConfig, dims: PageDims): string {
+  // Ensure we have all 6 panels (pad with empty if needed)
+  const allPages = [...pages];
+  while (allPages.length < 6) {
+    allPages.push({ id: `pad-${allPages.length}`, label: 'Empty', sections: [] });
+  }
+
+  // Panel labels for positioning reference
+  const sideALabels = [
+    { role: 'GLUE FLAP', position: 'Left Panel (folds behind)', foldNote: 'Hidden when folded' },
+    { role: 'FRONT COVER', position: 'Center Panel (face-up)', foldNote: 'Visible when folded' },
+    { role: 'BACK FLAP', position: 'Right Panel (folds over)', foldNote: 'Tucks into fold' },
+  ];
+  const sideBLabels = [
+    { role: 'INSIDE LEFT', position: 'Left Panel', foldNote: 'Visible when opened' },
+    { role: 'INSIDE CENTER', position: 'Center Panel', foldNote: 'Visible when opened' },
+    { role: 'INSIDE RIGHT', position: 'Right Panel', foldNote: 'Visible when opened' },
+  ];
+
+  // Side A (Outside): Glue(6) → Hero(1) → Details(2)
+  const sideAOrder = [5, 0, 1]; // indices into allPages
+  const sideAPages = sideAOrder.map((idx, pos) =>
+    buildPageWithLabel(allPages[idx], idx, config, dims, sideALabels[pos]),
+  );
+
+  // Side B (Inside): Refs(3) → ISI(4) → Blank(5)
+  const sideBOrder = [2, 3, 4];
+  const sideBPages = sideBOrder.map((idx, pos) =>
+    buildPageWithLabel(allPages[idx], idx, config, dims, sideBLabels[pos]),
+  );
+
+  return `
+    <!-- ══════════════════════════════════════════════════════════════════════
+         SIDE A — OUTSIDE (face-up when folded)
+         Physical layout: Glue | Front Cover | Back Flap
+         Fold direction: Right flap folds LEFT over the front, then glue
+         folds RIGHT behind.
+         ══════════════════════════════════════════════════════════════════════ -->
+    <div class="fc-spread-wrapper">
+      <div class="fc-spread-label">
+        <span class="fc-side-badge">SIDE A</span> Outside — Print this side first
+      </div>
+      <div class="fc-spread" data-spread="A" data-side="outside">
+        <div class="fc-fold-marks">
+          <div class="fc-fold-line" style="left: 33.333%"><span class="fc-fold-label">← FOLD</span></div>
+          <div class="fc-fold-line" style="left: 66.666%"><span class="fc-fold-label">FOLD →</span></div>
+        </div>
+        ${sideAPages.join('\n')}
+      </div>
+      <div class="fc-spread-dimensions">
+        ${dims.width}×${dims.height}px per panel · ${dims.width * 3}×${dims.height}px spread · Fold at ⅓ and ⅔
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════════════════
+         SIDE B — INSIDE (visible when fully opened)
+         Physical layout: Inside Left | Inside Center | Inside Right
+         This is the back of Side A — print on reverse.
+         ══════════════════════════════════════════════════════════════════════ -->
+    <div class="fc-spread-wrapper">
+      <div class="fc-spread-label">
+        <span class="fc-side-badge">SIDE B</span> Inside — Print on reverse of Side A
+      </div>
+      <div class="fc-spread" data-spread="B" data-side="inside">
+        <div class="fc-fold-marks">
+          <div class="fc-fold-line" style="left: 33.333%"><span class="fc-fold-label">← FOLD</span></div>
+          <div class="fc-fold-line" style="left: 66.666%"><span class="fc-fold-label">FOLD →</span></div>
+        </div>
+        ${sideBPages.join('\n')}
+      </div>
+      <div class="fc-spread-dimensions">
+        ${dims.width}×${dims.height}px per panel · ${dims.width * 3}×${dims.height}px spread · Fold at ⅓ and ⅔
+      </div>
+    </div>
+  `;
+}
+
+// Build a page with its position label overlay
+function buildPageWithLabel(
+  page: FlashcardPage,
+  index: number,
+  config: FlashcardConfig,
+  dims: PageDims,
+  label: { role: string; position: string; foldNote: string },
+): string {
+  const sectionsHTML = page.sections.length > 0
+    ? page.sections.map((s) => buildSection(s, config)).join('\n')
+    : `<div class="fc-empty-panel"><div class="fc-empty-role">${escapeHTML(page.foldRole?.toUpperCase() || 'EMPTY')}</div><div class="fc-empty-note">${escapeHTML(page.label)}</div></div>`;
+
+  const bgPosClass = page.backgroundPosition ? `bg-${page.backgroundPosition}` : '';
+  const bgLayer = page.backgroundArtifactUrl
+    ? `<div class="fc-bg-image ${bgPosClass}">
+        <img src="${escapeHTML(page.backgroundArtifactUrl)}" alt="" />
+        ${page.backgroundOverlay ? `<div class="fc-bg-overlay" style="background:${escapeHTML(page.backgroundOverlay)}"></div>` : ''}
+      </div>`
+    : '';
+
+  return `
+    <div class="fc-page" data-page="${index + 1}" data-label="${escapeHTML(page.label)}"${page.foldRole ? ` data-fold-role="${page.foldRole}"` : ''}>
+      <div class="fc-panel-label">
+        <div class="fc-panel-role">${escapeHTML(label.role)}</div>
+        <div class="fc-panel-position">${escapeHTML(label.position)}</div>
+        <div class="fc-panel-fold">${escapeHTML(label.foldNote)}</div>
+      </div>
+      ${bgLayer}
+      <div class="fc-content">
+        ${sectionsHTML}
+      </div>
+    </div>
+  `;
 }
 
 // ---------------------------------------------------------------------------
@@ -99,7 +352,7 @@ function getPageDimensions(config: FlashcardConfig): PageDims {
 // ---------------------------------------------------------------------------
 
 function buildCSS(config: FlashcardConfig, dims: PageDims): string {
-  const { brand, systemGraphic } = config;
+  const { brand, systemGraphic, template } = config;
   const primary = brand.colors.primary;
   const accent = brand.colors.accent;
   const bg = brand.colors.background;
@@ -108,20 +361,178 @@ function buildCSS(config: FlashcardConfig, dims: PageDims): string {
   const headlineFont = brand.typography.headlineFont;
   const bodyFont = brand.typography.bodyFont;
 
-  return `
-    @import url('https://fonts.googleapis.com/css2?family=${encodeURIComponent(headlineFont)}:wght@400;600;700;800&family=${encodeURIComponent(bodyFont)}:wght@300;400;500;600&display=swap');
+  const isTriFold = template === 'announcement';
+  const spreadWidth = dims.width * 3;
 
+  return `
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
     body {
-      background: #1a1a2e;
+      background: ${isTriFold ? '#f5f5f5' : '#1a1a2e'};
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 24px;
-      padding: 24px;
+      gap: ${isTriFold ? '48px' : '24px'};
+      padding: ${isTriFold ? '32px 16px' : '24px'};
       font-family: '${bodyFont}', sans-serif;
+      color: #333;
     }
+
+    /* ── Tri-fold spread wrapper ─────────────────────────────────────── */
+
+    .fc-spread-wrapper {
+      max-width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .fc-spread-label {
+      font-family: '${headlineFont}', sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      color: #333;
+      margin-bottom: 12px;
+      text-align: center;
+      letter-spacing: 0.5px;
+    }
+
+    .fc-side-badge {
+      display: inline-block;
+      padding: 2px 10px;
+      background: ${primary};
+      color: white;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+
+    .fc-spread-dimensions {
+      font-size: 11px;
+      color: #999;
+      margin-top: 8px;
+      font-family: monospace;
+      letter-spacing: 0.3px;
+    }
+
+    .fc-spread {
+      display: flex;
+      flex-direction: row;
+      position: relative;
+      box-shadow: 0 4px 32px rgba(0,0,0,0.12);
+      border-radius: 4px;
+      overflow: visible;
+      width: ${spreadWidth}px;
+      height: ${dims.height}px;
+      transform-origin: top center;
+    }
+
+    .fc-spread .fc-page {
+      box-shadow: none;
+      flex-shrink: 0;
+      border-radius: 0;
+    }
+
+    /* ── Fold marks ──────────────────────────────────────────────────── */
+
+    .fc-fold-marks {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    .fc-fold-line {
+      position: absolute;
+      top: 0;
+      width: 0;
+      height: 100%;
+      border-left: 2px dashed rgba(0, 0, 0, 0.15);
+    }
+
+    .fc-fold-label {
+      position: absolute;
+      top: 8px;
+      left: -22px;
+      width: 44px;
+      text-align: center;
+      font-size: 8px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: rgba(0, 0, 0, 0.3);
+      font-family: '${headlineFont}', sans-serif;
+    }
+
+    /* ── Panel position labels ──────────────────────────────────────── */
+
+    .fc-panel-label {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      right: 8px;
+      z-index: 5;
+      background: rgba(0, 0, 0, 0.06);
+      border-radius: 4px;
+      padding: 6px 10px;
+      pointer-events: none;
+    }
+
+    .fc-panel-role {
+      font-family: '${headlineFont}', sans-serif;
+      font-size: 9px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: ${primary};
+      margin-bottom: 2px;
+    }
+
+    .fc-panel-position {
+      font-size: 9px;
+      font-weight: 600;
+      color: #666;
+    }
+
+    .fc-panel-fold {
+      font-size: 8px;
+      color: #999;
+      font-style: italic;
+    }
+
+    /* ── Empty panel state ──────────────────────────────────────────── */
+
+    .fc-empty-panel {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      grid-column: 1 / -1;
+    }
+
+    .fc-empty-role {
+      font-family: '${headlineFont}', sans-serif;
+      font-size: 16px;
+      font-weight: 800;
+      letter-spacing: 3px;
+      color: rgba(0, 0, 0, 0.08);
+      text-transform: uppercase;
+    }
+
+    .fc-empty-note {
+      font-size: 11px;
+      color: rgba(0, 0, 0, 0.15);
+      margin-top: 4px;
+    }
+
+    /* ── Page (panel) ────────────────────────────────────────────────── */
 
     .fc-page {
       position: relative;
@@ -131,7 +542,7 @@ function buildCSS(config: FlashcardConfig, dims: PageDims): string {
       color: ${text};
       overflow: hidden;
       page-break-after: always;
-      box-shadow: 0 4px 24px rgba(0,0,0,0.3);
+      box-shadow: 0 4px 24px rgba(0,0,0,0.15);
     }
 
     /* System graphic backgrounds */
@@ -149,7 +560,7 @@ function buildCSS(config: FlashcardConfig, dims: PageDims): string {
       display: grid;
       grid-template-columns: repeat(12, 1fr);
       gap: 12px;
-      padding: 40px 48px;
+      padding: ${isTriFold ? '52px 36px 32px' : '40px 48px'};
       height: 100%;
       align-content: start;
     }
@@ -157,6 +568,45 @@ function buildCSS(config: FlashcardConfig, dims: PageDims): string {
     /* Section types */
     .fc-section {
       min-height: 0;
+    }
+
+    /* ── Print styles ────────────────────────────────────────────────── */
+
+    @media print {
+      body {
+        background: white;
+        padding: 0;
+        gap: 0;
+      }
+      .fc-spread-wrapper {
+        page-break-after: always;
+      }
+      .fc-spread {
+        box-shadow: none;
+        transform: none !important;
+        margin-bottom: 0 !important;
+        width: 100% !important;
+      }
+      .fc-spread .fc-page {
+        width: 33.333% !important;
+        height: auto !important;
+        aspect-ratio: ${dims.width} / ${dims.height};
+      }
+      .fc-page {
+        box-shadow: none;
+        page-break-after: always;
+      }
+      .fc-spread-label,
+      .fc-spread-dimensions {
+        color: #666 !important;
+        font-size: 10px !important;
+      }
+      .fc-panel-label {
+        background: rgba(0, 0, 0, 0.03);
+      }
+      .fc-fold-line {
+        border-left-color: rgba(0, 0, 0, 0.08);
+      }
     }
 
     .fc-hero {
@@ -801,29 +1251,6 @@ function buildCSS(config: FlashcardConfig, dims: PageDims): string {
       font-weight: 600;
     }
 
-    /* Tri-fold spread layout */
-    .fc-spread {
-      display: flex;
-      flex-direction: row;
-    }
-
-    .fc-spread .fc-page {
-      box-shadow: none;
-      flex-shrink: 0;
-    }
-
-    /* Print styles */
-    @media print {
-      body {
-        background: white;
-        padding: 0;
-        gap: 0;
-      }
-      .fc-page {
-        box-shadow: none;
-        page-break-after: always;
-      }
-    }
   `;
 }
 
