@@ -52,7 +52,7 @@ export function generateFlashcardHTML(config: FlashcardConfig): string {
   }
 
   const fontsLink = buildGoogleFontsLink(brand.typography.headlineFont, brand.typography.bodyFont);
-  const configMeta = JSON.stringify(config, null, 2);
+  const structureMap = buildStructureMap(config, dims, isTriFold);
 
   // Inline script for responsive spread scaling (tri-fold only)
   const scaleScript = isTriFold ? `
@@ -173,9 +173,20 @@ ${css}
 <body>
 ${pagesHTML}
 ${scaleScript}
-<!-- Configuration JSON (for programmatic consumption) -->
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     MERLIN DOCUMENT STRUCTURE MAP
+     Machine-readable JSON describing every panel, section, grid position,
+     artifact reference, and data schema in this document.
+     Parse with: JSON.parse(document.getElementById('merlin-structure').textContent)
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<script type="application/json" id="merlin-structure">
+${structureMap}
+</script>
+
+<!-- Raw FlashcardConfig (full editor state for re-import) -->
 <script type="application/json" id="merlin-config">
-${escapeHTML(configMeta)}
+${escapeHTML(JSON.stringify(config, null, 2))}
 </script>
 </body>
 </html>`;
@@ -195,6 +206,325 @@ function buildGoogleFontsLink(headlineFont: string, bodyFont: string): string {
   return `<link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?${params}&display=swap" rel="stylesheet">`;
+}
+
+// ---------------------------------------------------------------------------
+// Structure map builder — machine-readable document blueprint
+// ---------------------------------------------------------------------------
+
+function buildStructureMap(config: FlashcardConfig, dims: PageDims, isTriFold: boolean): string {
+  const { brand, pages, template, pageSize, systemGraphic } = config;
+
+  // ── Tri-fold panel position definitions ────────────────────────────────────
+  const triFoldPositions: Record<number, {
+    side: 'A' | 'B';
+    sideLabel: string;
+    panelIndex: number;
+    role: string;
+    position: string;
+    foldNote: string;
+    cssSelector: string;
+  }> = {
+    0: { side: 'A', sideLabel: 'Outside', panelIndex: 1, role: 'FRONT COVER', position: 'Center Panel', foldNote: 'Visible when folded — this is the face the reader sees first', cssSelector: '[data-spread="A"] .fc-page:nth-child(3)' },
+    1: { side: 'A', sideLabel: 'Outside', panelIndex: 2, role: 'BACK FLAP', position: 'Right Panel', foldNote: 'Folds LEFT over the front cover, tucks into the fold', cssSelector: '[data-spread="A"] .fc-page:nth-child(4)' },
+    2: { side: 'B', sideLabel: 'Inside', panelIndex: 0, role: 'INSIDE LEFT', position: 'Left Panel', foldNote: 'Visible when document is fully opened', cssSelector: '[data-spread="B"] .fc-page:nth-child(2)' },
+    3: { side: 'B', sideLabel: 'Inside', panelIndex: 1, role: 'INSIDE CENTER', position: 'Center Panel', foldNote: 'Visible when document is fully opened', cssSelector: '[data-spread="B"] .fc-page:nth-child(3)' },
+    4: { side: 'B', sideLabel: 'Inside', panelIndex: 2, role: 'INSIDE RIGHT', position: 'Right Panel', foldNote: 'Visible when document is fully opened', cssSelector: '[data-spread="B"] .fc-page:nth-child(4)' },
+    5: { side: 'A', sideLabel: 'Outside', panelIndex: 0, role: 'GLUE FLAP', position: 'Left Panel', foldNote: 'Folds RIGHT behind the front cover — hidden when folded', cssSelector: '[data-spread="A"] .fc-page:nth-child(2)' },
+  };
+
+  // ── Build artifact inventory ────────────────────────────────────────────────
+  const artifacts: Array<{ sectionId: string; sectionType: string; panelId: string; field: string; artifactId?: string; artifactUrl?: string }> = [];
+
+  // ── Build panel + section inventory ─────────────────────────────────────────
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const panelEntries = pages.map((page, idx) => {
+    const pos = isTriFold ? triFoldPositions[idx] : null;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sections = page.sections.map((sec: any, si: number) => {
+      const d = sec.data || {};
+      const sectionEntry: Record<string, unknown> = {
+        index: si,
+        id: sec.id,
+        type: d.type,
+        cssSelector: `[data-page="${idx + 1}"] [data-section-type="${d.type}"]:nth-of-type(${si + 1})`,
+        grid: {
+          colStart: sec.colStart,
+          colSpan: sec.colSpan,
+          cssGridColumn: `${sec.colStart} / span ${sec.colSpan}`,
+          widthPercent: Math.round((sec.colSpan / 12) * 100),
+        },
+      };
+
+      // Extract artifact references
+      if (d.artifactId || d.artifactUrl) {
+        sectionEntry.artifact = { id: d.artifactId, url: d.artifactUrl };
+        artifacts.push({ sectionId: sec.id, sectionType: d.type, panelId: page.id, field: 'artifactId', artifactId: d.artifactId, artifactUrl: d.artifactUrl });
+      }
+
+      // Extract type-specific data summaries
+      switch (d.type) {
+        case 'hero':
+          sectionEntry.content = { eyebrow: d.eyebrow, headline: d.headline, subheadline: d.subheadline };
+          if (d.backgroundArtifactId) artifacts.push({ sectionId: sec.id, sectionType: d.type, panelId: page.id, field: 'backgroundArtifactId', artifactId: d.backgroundArtifactId });
+          if (d.photographyArtifactId) artifacts.push({ sectionId: sec.id, sectionType: d.type, panelId: page.id, field: 'photographyArtifactId', artifactId: d.photographyArtifactId });
+          break;
+        case 'headline':
+          sectionEntry.content = { text: d.text, level: d.level, eyebrow: d.eyebrow };
+          break;
+        case 'body_text':
+          sectionEntry.content = { text: d.text, bullets: !!d.bullets, lineCount: d.text?.split('\n').length };
+          break;
+        case 'visualization':
+          sectionEntry.content = { title: d.title, caption: d.caption, alt: d.alt, fit: d.fit || 'contain' };
+          break;
+        case 'stat_callout':
+          sectionEntry.content = { stats: d.stats?.map((s: Record<string, unknown>) => ({ value: s.value, label: s.label, style: s.style })) };
+          break;
+        case 'icon_flow':
+          sectionEntry.content = {
+            showConnectors: d.showConnectors,
+            steps: d.steps?.map((s: Record<string, unknown>, i: number) => {
+              if (s.artifactId) artifacts.push({ sectionId: sec.id, sectionType: 'icon_flow', panelId: page.id, field: `steps[${i}].artifactId`, artifactId: s.artifactId as string });
+              return { title: s.title, description: s.description, hasArtifact: !!s.artifactId };
+            }),
+          };
+          break;
+        case 'icon_row':
+          sectionEntry.content = {
+            icons: d.icons?.map((ic: Record<string, unknown>, i: number) => {
+              if (ic.artifactId) artifacts.push({ sectionId: sec.id, sectionType: 'icon_row', panelId: page.id, field: `icons[${i}].artifactId`, artifactId: ic.artifactId as string });
+              return { label: ic.label, hasArtifact: !!ic.artifactId };
+            }),
+          };
+          break;
+        case 'checkmark_callout':
+          sectionEntry.content = { items: d.items?.map((it: Record<string, string>) => ({ heading: it.heading, body: it.body })) };
+          break;
+        case 'bar_chart':
+          sectionEntry.content = { title: d.title, orientation: d.orientation, groupCount: d.groups?.length };
+          break;
+        case 'donut_chart':
+          sectionEntry.content = { title: d.title, chartCount: d.charts?.length };
+          break;
+        case 'data_table':
+          sectionEntry.content = { title: d.title, headers: d.headers, rowCount: d.rows?.length };
+          break;
+        case 'references':
+          sectionEntry.content = { itemCount: d.items?.length, items: d.items };
+          break;
+        case 'footer':
+          sectionEntry.content = { jobCode: d.jobCode, date: d.date, legalLine: d.legalLine, productLogoCount: d.productLogos?.length || 0 };
+          if (d.logoArtifactId) artifacts.push({ sectionId: sec.id, sectionType: 'footer', panelId: page.id, field: 'logoArtifactId', artifactId: d.logoArtifactId, artifactUrl: d.logoArtifactUrl });
+          if (d.corporateLogoArtifactId) artifacts.push({ sectionId: sec.id, sectionType: 'footer', panelId: page.id, field: 'corporateLogoArtifactId', artifactId: d.corporateLogoArtifactId });
+          break;
+        case 'qr_cta':
+          sectionEntry.content = { text: d.text, footnote: d.footnote };
+          if (d.qrArtifactId) artifacts.push({ sectionId: sec.id, sectionType: 'qr_cta', panelId: page.id, field: 'qrArtifactId', artifactId: d.qrArtifactId, artifactUrl: d.qrArtifactUrl });
+          break;
+        case 'cta_block':
+          sectionEntry.content = { text: d.text, style: d.style, url: d.url };
+          break;
+        case 'isi_block':
+          sectionEntry.content = { variant: d.variant, hasCustomText: !!d.text, usesGlobalISI: d.variant === 'full' };
+          break;
+        case 'divider':
+          sectionEntry.content = { style: d.style };
+          break;
+        case 'ruled_subheader':
+          sectionEntry.content = { text: d.text };
+          break;
+        case 'dosing_timeline':
+          sectionEntry.content = { title: d.title, phaseCount: d.phases?.length };
+          break;
+        default:
+          sectionEntry.content = d;
+      }
+
+      return sectionEntry;
+    });
+
+    // Build panel entry
+    const panel: Record<string, unknown> = {
+      id: page.id,
+      label: page.label,
+      index: idx,
+      foldRole: page.foldRole || null,
+      sectionCount: sections.length,
+      sections,
+      dimensions: {
+        width: dims.width,
+        height: dims.height,
+        unit: dims.unit,
+        widthInches: +(dims.width / 96).toFixed(2),
+        heightInches: +(dims.height / 96).toFixed(2),
+      },
+      cssSelector: `[data-page="${idx + 1}"]`,
+    };
+
+    // Add background artifact
+    if (page.backgroundArtifactId || page.backgroundArtifactUrl) {
+      panel.backgroundArtifact = { id: page.backgroundArtifactId, url: page.backgroundArtifactUrl };
+      artifacts.push({ sectionId: 'page-bg', sectionType: 'page_background', panelId: page.id, field: 'backgroundArtifactId', artifactId: page.backgroundArtifactId, artifactUrl: page.backgroundArtifactUrl });
+    }
+    if (page.backgroundPosition) panel.backgroundPosition = page.backgroundPosition;
+    if (page.backgroundOverlay) panel.backgroundOverlay = page.backgroundOverlay;
+
+    // Add tri-fold positioning
+    if (pos) {
+      panel.triFold = {
+        side: pos.side,
+        sideLabel: pos.sideLabel,
+        panelIndex: pos.panelIndex,
+        role: pos.role,
+        position: pos.position,
+        foldNote: pos.foldNote,
+        cssSelector: pos.cssSelector,
+      };
+    }
+
+    return panel;
+  });
+
+  // ── Section type schema reference ──────────────────────────────────────────
+  const sectionSchemas: Record<string, { description: string; fields: Record<string, string> }> = {
+    hero: {
+      description: 'Full-width hero block with optional eyebrow, headline, and subheadline',
+      fields: { eyebrow: 'string? — uppercase label above headline', headline: 'string — primary heading text', subheadline: 'string? — secondary text below headline', backgroundArtifactId: 'string? — background image artifact', photographyArtifactId: 'string? — photography overlay artifact' },
+    },
+    headline: {
+      description: 'Heading element (h1/h2/h3) with optional eyebrow',
+      fields: { text: 'string — heading text', level: '"h1"|"h2"|"h3" — heading level', eyebrow: 'string? — uppercase label above heading' },
+    },
+    body_text: {
+      description: 'Paragraph text, optionally rendered as bulleted list',
+      fields: { text: 'string — body content (\\n for line breaks)', bullets: 'boolean? — render as <ul> list if true' },
+    },
+    visualization: {
+      description: 'Chart/diagram artifact placeholder — users upload pre-approved PNGs from the Artifact Library',
+      fields: { artifactId: 'string? — artifact ID from library', artifactUrl: 'string? — cached image URL', title: 'string? — title above image', caption: 'string? — caption below image', footnote: 'string? — footnote text', alt: 'string — alt text', fit: '"contain"|"cover" — object-fit mode' },
+    },
+    stat_callout: {
+      description: 'Stat display (circles or large numbers) — typically 2-3 stats side by side',
+      fields: { 'stats[].value': 'string — the stat value (e.g., "52%")', 'stats[].label': 'string — stat label', 'stats[].sublabel': 'string? — secondary label', 'stats[].style': '"circle"|"large-number"|"fraction" — visual style' },
+    },
+    icon_flow: {
+      description: 'Step flow with numbered icons and optional connectors (1 → 2 → 3 → 4)',
+      fields: { 'steps[].title': 'string — step title', 'steps[].description': 'string? — step description', 'steps[].artifactId': 'string? — icon artifact', showConnectors: 'boolean — show → arrows between steps' },
+    },
+    icon_row: {
+      description: 'Horizontal row of icons with labels',
+      fields: { 'icons[].label': 'string — icon label', 'icons[].sublabel': 'string? — secondary label', 'icons[].artifactId': 'string? — icon artifact' },
+    },
+    checkmark_callout: {
+      description: 'Checkmark items with bold heading + body text — used for key benefits',
+      fields: { 'items[].heading': 'string — bold heading', 'items[].body': 'string — body text' },
+    },
+    bar_chart: {
+      description: 'Bar chart — renders as CSS bars or falls back to artifact image',
+      fields: { title: 'string — chart title', orientation: '"vertical"|"horizontal"', 'groups[].label': 'string — group label', 'groups[].bars[].value': 'number', 'groups[].bars[].isProduct': 'boolean — use brand color if true', artifactId: 'string? — pre-rendered chart artifact', artifactUrl: 'string? — cached artifact URL' },
+    },
+    donut_chart: {
+      description: 'Donut chart — CSS conic-gradient or artifact image',
+      fields: { title: 'string? — chart title', 'charts[].label': 'string', 'charts[].value': 'number', 'charts[].total': 'number', 'charts[].isProduct': 'boolean', artifactId: 'string?', artifactUrl: 'string?' },
+    },
+    data_table: {
+      description: 'HTML table with headers and optional highlighted rows',
+      fields: { title: 'string — table title', headers: 'string[] — column headers', 'rows[].cells': 'string[] — cell values', 'rows[].isHighlighted': 'boolean? — highlight row', artifactId: 'string?', artifactUrl: 'string?' },
+    },
+    line_chart: {
+      description: 'Line chart — rendered via artifact image',
+      fields: { title: 'string', 'lines[].label': 'string', 'lines[].isProduct': 'boolean', 'lines[].dataPoints[]': '{x:string, y:number}', artifactId: 'string?', artifactUrl: 'string?' },
+    },
+    dosing_timeline: {
+      description: 'Phase-based dosing strip (horizontal phases with duration/frequency)',
+      fields: { title: 'string', 'phases[].label': 'string', 'phases[].duration': 'string', 'phases[].frequency': 'string', 'phases[].iconArtifactId': 'string?' },
+    },
+    image_block: {
+      description: 'Photography or graphic image from artifact library',
+      fields: { artifactId: 'string?', artifactUrl: 'string?', caption: 'string?', alt: 'string' },
+    },
+    cta_block: {
+      description: 'Call-to-action — button, banner, or callout style',
+      fields: { text: 'string — CTA text', style: '"button"|"banner"|"callout"', url: 'string? — click URL', artifactId: 'string? — CTA image artifact', artifactUrl: 'string?' },
+    },
+    qr_cta: {
+      description: 'QR code callout with text and scannable QR image',
+      fields: { text: 'string — prompt text', qrArtifactId: 'string? — QR code image', qrArtifactUrl: 'string?', footnote: 'string? — e.g., "Data rates may apply"' },
+    },
+    isi_block: {
+      description: 'Important Safety Information — rendered in 2-column layout at 8px font',
+      fields: { variant: '"full"|"selected" — full pulls from global ISI config', text: 'string? — custom ISI text (for "selected" variant)' },
+    },
+    references: {
+      description: 'Numbered reference list (ordered list)',
+      fields: { items: 'string[] — reference strings' },
+    },
+    footer: {
+      description: 'Legal footer with logos, job code, date, and legal lines',
+      fields: { logoArtifactId: 'string?', logoArtifactUrl: 'string?', corporateLogoArtifactId: 'string?', corporateLogoArtifactUrl: 'string?', 'productLogos[].artifactId': 'string?', 'productLogos[].alt': 'string', jobCode: 'string?', date: 'string?', legalLine: 'string?', legalLines: 'string[]? — additional legal lines', copyrightLine: 'string?' },
+    },
+    divider: {
+      description: 'Visual separator — line, accent gradient, or whitespace',
+      fields: { style: '"line"|"accent"|"space"' },
+    },
+    ruled_subheader: {
+      description: 'Centered text between horizontal rules — used as section dividers',
+      fields: { text: 'string — subheader text' },
+    },
+  };
+
+  // ── Assemble the full structure map ─────────────────────────────────────────
+  const structure = {
+    _version: '1.0.0',
+    _generator: 'MERLIN Template Engine',
+    _generated: new Date().toISOString(),
+    _description: 'Machine-readable document structure map. Each panel contains its sections with grid positions, content summaries, and artifact references. Section schemas describe the data model for each section type.',
+
+    document: {
+      template: template || 'standard',
+      pageSize,
+      systemGraphic,
+      panelCount: pages.length,
+      dimensions: {
+        panel: { width: dims.width, height: dims.height, unit: dims.unit, widthInches: +(dims.width / 96).toFixed(2), heightInches: +(dims.height / 96).toFixed(2) },
+        ...(isTriFold ? { spread: { width: dims.width * 3, height: dims.height, widthInches: +((dims.width * 3) / 96).toFixed(2), heightInches: +(dims.height / 96).toFixed(2) } } : {}),
+      },
+      grid: { columns: 12, gap: '12px', contentPadding: isTriFold ? '52px 36px 32px' : '40px 48px' },
+      ...(isTriFold ? {
+        foldInstructions: [
+          'Print Side A (outside) on front, Side B (inside) on back — duplex',
+          'Fold right panel (Back Flap) LEFT over the center panel',
+          'Fold left panel (Glue Flap) RIGHT behind the center panel',
+          'The Front Cover is now face-up, the Back Flap is tucked in',
+        ],
+      } : {}),
+    },
+
+    brand: {
+      name: brand.name,
+      colors: brand.colors,
+      typography: {
+        headlineFont: brand.typography.headlineFont,
+        bodyFont: brand.typography.bodyFont,
+        minBodySize: brand.typography.minBodySize,
+        minIsiSize: brand.typography.minIsiSize,
+      },
+      logoUrl: brand.logoUrl || null,
+    },
+
+    panels: panelEntries,
+
+    artifacts: {
+      totalReferences: artifacts.length,
+      references: artifacts,
+    },
+
+    sectionSchemas,
+  };
+
+  return JSON.stringify(structure, null, 2);
 }
 
 // ---------------------------------------------------------------------------
